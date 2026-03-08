@@ -40,12 +40,21 @@ final class WamrInstanceAdapter implements Instance {
 
     @Override
     public Optional<Table> table(String name) {
-        return Optional.empty();
+        try {
+            return Optional.of(new WamrTableAdapter(nativeInstance.getTable(name)));
+        } catch (ai.tegmentum.wamr4j.exception.WasmRuntimeException e) {
+            return Optional.empty();
+        }
     }
 
     @Override
     public Optional<Global> global(String name) {
-        return Optional.empty();
+        try {
+            nativeInstance.getGlobal(name);
+            return Optional.of(new WamrGlobalAdapter(nativeInstance, name));
+        } catch (ai.tegmentum.wamr4j.exception.WasmRuntimeException e) {
+            return Optional.empty();
+        }
     }
 
     @Override

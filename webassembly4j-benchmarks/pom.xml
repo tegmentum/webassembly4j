@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>ai.tegmentum.webassembly4j</groupId>
+        <artifactId>webassembly4j-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>webassembly4j-benchmarks</artifactId>
+    <packaging>jar</packaging>
+
+    <name>WebAssembly4J Benchmarks</name>
+    <description>JMH benchmarks comparing WebAssembly engine performance across providers</description>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+
+        <!-- Benchmark-specific properties -->
+        <jmh.benchmarks>.*</jmh.benchmarks>
+        <jmh.iterations>5</jmh.iterations>
+        <jmh.warmupIterations>3</jmh.warmupIterations>
+        <jmh.forks>2</jmh.forks>
+        <jmh.threads>1</jmh.threads>
+        <jmh.mode>thrpt</jmh.mode>
+        <jmh.timeUnit>s</jmh.timeUnit>
+        <jmh.output>benchmarks.txt</jmh.output>
+        <jmh.resultFormat>TEXT</jmh.resultFormat>
+    </properties>
+
+    <dependencies>
+        <!-- Project Dependencies -->
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>webassembly4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>webassembly4j-spi</artifactId>
+        </dependency>
+
+        <!-- Provider Dependencies -->
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>wasmtime4j-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>wamr4j-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>chicory4j-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>graalwasm4j-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- JMH Dependencies -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+        </dependency>
+
+        <!-- JSON Processing for report generation -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Test Dependencies -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler plugin with JMH annotation processing -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.openjdk.jmh</groupId>
+                            <artifactId>jmh-generator-annprocess</artifactId>
+                            <version>${jmh.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Exec plugin for running benchmarks -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>org.openjdk.jmh.Main</mainClass>
+                    <commandlineArgs>
+                        -i ${jmh.iterations}
+                        -wi ${jmh.warmupIterations}
+                        -f ${jmh.forks}
+                        -t ${jmh.threads}
+                        -bm ${jmh.mode}
+                        -tu ${jmh.timeUnit}
+                        -o ${jmh.output}
+                        -rf ${jmh.resultFormat}
+                        ${jmh.benchmarks}
+                    </commandlineArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Shade plugin for creating uber JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>webassembly4j-benchmarks</finalName>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.openjdk.jmh.Main</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- Smoke testing benchmarks (verify they compile and execute) -->
+        <profile>
+            <id>benchmark-smoke</id>
+            <properties>
+                <jmh.iterations>1</jmh.iterations>
+                <jmh.warmupIterations>0</jmh.warmupIterations>
+                <jmh.forks>0</jmh.forks>
+            </properties>
+        </profile>
+
+        <!-- Quick benchmarks (fewer iterations) -->
+        <profile>
+            <id>quick-benchmarks</id>
+            <properties>
+                <jmh.iterations>1</jmh.iterations>
+                <jmh.warmupIterations>1</jmh.warmupIterations>
+                <jmh.forks>1</jmh.forks>
+            </properties>
+        </profile>
+
+        <!-- Production benchmarks (more iterations) -->
+        <profile>
+            <id>production-benchmarks</id>
+            <properties>
+                <jmh.iterations>10</jmh.iterations>
+                <jmh.warmupIterations>5</jmh.warmupIterations>
+                <jmh.forks>3</jmh.forks>
+            </properties>
+        </profile>
+
+        <!-- JSON report output -->
+        <profile>
+            <id>benchmark-report</id>
+            <properties>
+                <jmh.resultFormat>JSON</jmh.resultFormat>
+                <jmh.output>target/benchmark-results.json</jmh.output>
+            </properties>
+        </profile>
+    </profiles>
+</project>
