@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>ai.tegmentum.webassembly4j</groupId>
+        <artifactId>webassembly4j-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>wamr4j-provider</artifactId>
+    <packaging>jar</packaging>
+
+    <name>WebAssembly4J WAMR Provider</name>
+    <description>WAMR engine provider for WebAssembly4J</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>ai.tegmentum.webassembly4j</groupId>
+            <artifactId>webassembly4j-spi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.wamr4j</groupId>
+            <artifactId>wamr4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.wamr4j</groupId>
+            <artifactId>wamr4j-jni</artifactId>
+            <version>${wamr4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
