@@ -33,7 +33,19 @@ public final class ServiceLoaderProviderRegistry
     @Override
     public Engine createEngine(WebAssemblyConfig config, EngineConfig engineConfig,
                                String requestedEngineId, String requestedProviderId) {
-        return createEngine(config, requestedEngineId, requestedProviderId);
+        WebAssemblyConfig effectiveConfig = config;
+        if (engineConfig != null) {
+            if (effectiveConfig == null) {
+                effectiveConfig = WebAssemblyConfig.builder()
+                        .engineConfig(engineConfig)
+                        .build();
+            } else if (!effectiveConfig.engineConfig().isPresent()) {
+                effectiveConfig = WebAssemblyConfig.builder()
+                        .engineConfig(engineConfig)
+                        .build();
+            }
+        }
+        return createEngine(effectiveConfig, requestedEngineId, requestedProviderId);
     }
 
     @Override

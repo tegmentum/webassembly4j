@@ -2,6 +2,8 @@ package ai.tegmentum.webassembly4j.benchmarks;
 
 import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.WebAssembly;
+import ai.tegmentum.webassembly4j.api.WebAssemblyBuilder;
+import ai.tegmentum.webassembly4j.api.config.EngineConfig;
 
 public final class BenchmarkSupport {
 
@@ -13,7 +15,12 @@ public final class BenchmarkSupport {
             System.setProperty(variant.systemProperty(), variant.propertyValue());
         }
         try {
-            return WebAssembly.builder().engine(variant.engineId()).build();
+            WebAssemblyBuilder builder = WebAssembly.builder().engine(variant.engineId());
+            EngineConfig config = variant.engineConfig();
+            if (config != null) {
+                builder.engineConfig(config);
+            }
+            return builder.build();
         } finally {
             if (variant.systemProperty() != null) {
                 System.clearProperty(variant.systemProperty());
@@ -26,7 +33,12 @@ public final class BenchmarkSupport {
             System.setProperty(variant.systemProperty(), variant.propertyValue());
         }
         try {
-            Engine engine = WebAssembly.builder().engine(variant.engineId()).build();
+            WebAssemblyBuilder builder = WebAssembly.builder().engine(variant.engineId());
+            EngineConfig config = variant.engineConfig();
+            if (config != null) {
+                builder.engineConfig(config);
+            }
+            Engine engine = builder.build();
             engine.close();
             return true;
         } catch (Exception e) {
