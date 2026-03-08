@@ -7,7 +7,6 @@ import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.ValueType;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -24,13 +23,14 @@ public class HostFunctionBenchmark {
 
     private Engine engine;
     private Function callHostFunction;
-    private boolean available;
+    private int counter;
 
     @Setup(Level.Trial)
     public void setup() {
         EngineVariant ev = EngineVariant.valueOf(variant);
-        available = BenchmarkSupport.isAvailable(ev);
-        if (!available) return;
+        if (!BenchmarkSupport.isAvailable(ev)) {
+            throw new IllegalStateException("Engine variant " + variant + " is not available");
+        }
 
         engine = BenchmarkSupport.createEngine(ev);
         Module module = engine.loadModule(BenchmarkModules.IMPORT_MODULE);
@@ -44,6 +44,7 @@ public class HostFunctionBenchmark {
 
         Instance instance = module.instantiate(ctx);
         callHostFunction = instance.function("call_host").orElseThrow();
+        counter = 0;
     }
 
     @TearDown(Level.Trial)
@@ -54,8 +55,7 @@ public class HostFunctionBenchmark {
     }
 
     @Benchmark
-    public void hostFunctionRoundTrip(Blackhole bh) {
-        if (!available) return;
-        bh.consume(callHostFunction.invoke(42));
+    public Object hostFunctionRoundTrip() {
+        return callHostFunction.invoke(counter++);
     }
 }
