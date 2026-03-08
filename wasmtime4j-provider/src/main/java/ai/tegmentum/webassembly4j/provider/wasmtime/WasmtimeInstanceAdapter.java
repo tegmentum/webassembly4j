@@ -30,14 +30,14 @@ final class WasmtimeInstanceAdapter implements Instance {
 
     @Override
     public Optional<Table> table(String name) {
-        // Table adapter not yet implemented
-        return Optional.empty();
+        return nativeInstance.getTable(name)
+                .map(WasmtimeTableAdapter::new);
     }
 
     @Override
     public Optional<Global> global(String name) {
-        // Global adapter not yet implemented
-        return Optional.empty();
+        return nativeInstance.getGlobal(name)
+                .map(WasmtimeGlobalAdapter::new);
     }
 
     @Override

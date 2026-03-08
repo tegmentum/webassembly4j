@@ -39,4 +39,41 @@ class DefaultLinkingContextTest {
         DefaultLinkingContext ctx = DefaultLinkingContext.builder().build();
         assertInstanceOf(LinkingContext.class, ctx);
     }
+
+    @Test
+    void emptyContextHasNoHostFunctions() {
+        DefaultLinkingContext ctx = DefaultLinkingContext.builder().build();
+        assertTrue(ctx.hostFunctions().isEmpty());
+    }
+
+    @Test
+    void hostFunctionsArePreserved() {
+        DefaultLinkingContext ctx = DefaultLinkingContext.builder()
+                .addHostFunction("env", "log",
+                        new ValueType[] { ValueType.I32 },
+                        new ValueType[0],
+                        args -> null)
+                .build();
+
+        assertEquals(1, ctx.hostFunctions().size());
+        HostFunctionDefinition def = ctx.hostFunctions().get(0);
+        assertEquals("env", def.moduleName());
+        assertEquals("log", def.functionName());
+        assertArrayEquals(new ValueType[] { ValueType.I32 }, def.parameterTypes());
+        assertEquals(0, def.resultTypes().length);
+    }
+
+    @Test
+    void hostFunctionsAreUnmodifiable() {
+        DefaultLinkingContext ctx = DefaultLinkingContext.builder()
+                .addHostFunction("env", "log",
+                        new ValueType[] { ValueType.I32 },
+                        new ValueType[0],
+                        args -> null)
+                .build();
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> ctx.hostFunctions().add(new HostFunctionDefinition(
+                        "m", "f", new ValueType[0], new ValueType[0], args -> null)));
+    }
 }
