@@ -3,7 +3,6 @@ package ai.tegmentum.webassembly4j.benchmarks;
 import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.Module;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -19,15 +18,14 @@ public class ModuleLoadBenchmark {
     private String variant;
 
     private Engine engine;
-    private boolean available;
 
     @Setup(Level.Trial)
     public void setup() {
         EngineVariant ev = EngineVariant.valueOf(variant);
-        available = BenchmarkSupport.isAvailable(ev);
-        if (available) {
-            engine = BenchmarkSupport.createEngine(ev);
+        if (!BenchmarkSupport.isAvailable(ev)) {
+            throw new IllegalStateException("Engine variant " + variant + " is not available");
         }
+        engine = BenchmarkSupport.createEngine(ev);
     }
 
     @TearDown(Level.Trial)
@@ -38,18 +36,16 @@ public class ModuleLoadBenchmark {
     }
 
     @Benchmark
-    public void loadSimpleModule(Blackhole bh) {
-        if (!available) return;
+    public Module loadSimpleModule() {
         Module module = engine.loadModule(BenchmarkModules.ADD_MODULE);
-        bh.consume(module);
         module.close();
+        return module;
     }
 
     @Benchmark
-    public void loadComputeModule(Blackhole bh) {
-        if (!available) return;
+    public Module loadComputeModule() {
         Module module = engine.loadModule(BenchmarkModules.FIBONACCI_MODULE);
-        bh.consume(module);
         module.close();
+        return module;
     }
 }

@@ -5,7 +5,6 @@ import ai.tegmentum.webassembly4j.api.Function;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Module;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -21,33 +20,33 @@ public class FunctionInvocationBenchmark {
     private String variant;
 
     private Engine engine;
-    private Instance addInstance;
-    private Instance voidInstance;
-    private Instance fibInstance;
     private Function addFunction;
     private Function noopFunction;
     private Function fibFunction;
-    private boolean available;
+    private int counter;
 
     @Setup(Level.Trial)
     public void setup() {
         EngineVariant ev = EngineVariant.valueOf(variant);
-        available = BenchmarkSupport.isAvailable(ev);
-        if (!available) return;
+        if (!BenchmarkSupport.isAvailable(ev)) {
+            throw new IllegalStateException("Engine variant " + variant + " is not available");
+        }
 
         engine = BenchmarkSupport.createEngine(ev);
 
         Module addModule = engine.loadModule(BenchmarkModules.ADD_MODULE);
-        addInstance = addModule.instantiate();
+        Instance addInstance = addModule.instantiate();
         addFunction = addInstance.function("add").orElseThrow();
 
         Module voidModule = engine.loadModule(BenchmarkModules.VOID_MODULE);
-        voidInstance = voidModule.instantiate();
+        Instance voidInstance = voidModule.instantiate();
         noopFunction = voidInstance.function("noop").orElseThrow();
 
         Module fibModule = engine.loadModule(BenchmarkModules.FIBONACCI_MODULE);
-        fibInstance = fibModule.instantiate();
+        Instance fibInstance = fibModule.instantiate();
         fibFunction = fibInstance.function("fibonacci").orElseThrow();
+
+        counter = 0;
     }
 
     @TearDown(Level.Trial)
@@ -58,20 +57,20 @@ public class FunctionInvocationBenchmark {
     }
 
     @Benchmark
-    public void invokeSimpleAdd(Blackhole bh) {
-        if (!available) return;
-        bh.consume(addFunction.invoke(3, 4));
+    public Object invokeSimpleAdd() {
+        int a = counter++ & 0xFF;
+        return addFunction.invoke(a, a + 1);
     }
 
     @Benchmark
-    public void invokeVoidFunction(Blackhole bh) {
-        if (!available) return;
-        bh.consume(noopFunction.invoke());
+    public Object invokeVoidFunction() {
+        noopFunction.invoke();
+        return counter++;
     }
 
     @Benchmark
-    public void invokeFibonacci(Blackhole bh) {
-        if (!available) return;
-        bh.consume(fibFunction.invoke(20));
+    public Object invokeFibonacci() {
+        int n = 15 + (counter++ & 0x7);
+        return fibFunction.invoke(n);
     }
 }

@@ -65,6 +65,32 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- Native runtime libraries (needed for JNI and Panama variants) -->
+        <dependency>
+            <groupId>ai.tegmentum</groupId>
+            <artifactId>wasmtime4j-jni</artifactId>
+            <version>${wasmtime4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum</groupId>
+            <artifactId>wasmtime4j-panama</artifactId>
+            <version>${wasmtime4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.wamr4j</groupId>
+            <artifactId>wamr4j-jni</artifactId>
+            <version>${wamr4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ai.tegmentum.wamr4j</groupId>
+            <artifactId>wamr4j-panama</artifactId>
+            <version>${wamr4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- JMH Dependencies -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>

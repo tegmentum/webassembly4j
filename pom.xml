@@ -45,6 +45,7 @@
         <module>chicory4j-provider</module>
         <module>graalwasm4j-provider</module>
         <module>webassembly4j-benchmarks</module>
+        <module>webassembly4j-bindgen</module>
     </modules>
 
     <properties>

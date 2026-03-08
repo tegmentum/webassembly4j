@@ -6,7 +6,6 @@ import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Module;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -25,22 +24,22 @@ public class MemoryOperationsBenchmark {
     private int dataSize;
 
     private Engine engine;
-    private Instance instance;
     private Function storeFunction;
     private Function loadFunction;
     private Memory memory;
     private byte[] testData;
-    private boolean available;
+    private int counter;
 
     @Setup(Level.Trial)
     public void setup() {
         EngineVariant ev = EngineVariant.valueOf(variant);
-        available = BenchmarkSupport.isAvailable(ev);
-        if (!available) return;
+        if (!BenchmarkSupport.isAvailable(ev)) {
+            throw new IllegalStateException("Engine variant " + variant + " is not available");
+        }
 
         engine = BenchmarkSupport.createEngine(ev);
         Module module = engine.loadModule(BenchmarkModules.MEMORY_MODULE);
-        instance = module.instantiate();
+        Instance instance = module.instantiate();
         storeFunction = instance.function("store").orElseThrow();
         loadFunction = instance.function("load").orElseThrow();
         memory = instance.memory("memory").orElseThrow();
@@ -49,6 +48,7 @@ public class MemoryOperationsBenchmark {
         for (int i = 0; i < dataSize; i++) {
             testData[i] = (byte) (i & 0xFF);
         }
+        counter = 0;
     }
 
     @TearDown(Level.Trial)
@@ -59,27 +59,24 @@ public class MemoryOperationsBenchmark {
     }
 
     @Benchmark
-    public void memoryWriteViaFunction(Blackhole bh) {
-        if (!available) return;
-        bh.consume(storeFunction.invoke(0, 42));
+    public Object memoryWriteViaFunction() {
+        int val = counter++;
+        return storeFunction.invoke(0, val);
     }
 
     @Benchmark
-    public void memoryReadViaFunction(Blackhole bh) {
-        if (!available) return;
-        bh.consume(loadFunction.invoke(0));
+    public Object memoryReadViaFunction() {
+        return loadFunction.invoke(counter++ & 0xFFFC);
     }
 
     @Benchmark
-    public void directMemoryWrite(Blackhole bh) {
-        if (!available) return;
+    public void directMemoryWrite() {
+        testData[0] = (byte) counter++;
         memory.write(0, testData);
-        bh.consume(testData);
     }
 
     @Benchmark
-    public void directMemoryRead(Blackhole bh) {
-        if (!available) return;
-        bh.consume(memory.read(0, dataSize));
+    public byte[] directMemoryRead() {
+        return memory.read(0, dataSize);
     }
 }

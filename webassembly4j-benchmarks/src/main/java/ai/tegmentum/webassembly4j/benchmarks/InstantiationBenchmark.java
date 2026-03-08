@@ -6,7 +6,6 @@ import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.ValueType;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -25,13 +24,13 @@ public class InstantiationBenchmark {
     private Module simpleModule;
     private Module importModule;
     private DefaultLinkingContext linkingContext;
-    private boolean available;
 
     @Setup(Level.Trial)
     public void setup() {
         EngineVariant ev = EngineVariant.valueOf(variant);
-        available = BenchmarkSupport.isAvailable(ev);
-        if (!available) return;
+        if (!BenchmarkSupport.isAvailable(ev)) {
+            throw new IllegalStateException("Engine variant " + variant + " is not available");
+        }
 
         engine = BenchmarkSupport.createEngine(ev);
         simpleModule = engine.loadModule(BenchmarkModules.ADD_MODULE);
@@ -58,16 +57,12 @@ public class InstantiationBenchmark {
     }
 
     @Benchmark
-    public void instantiateSimple(Blackhole bh) {
-        if (!available) return;
-        Instance instance = simpleModule.instantiate();
-        bh.consume(instance);
+    public Instance instantiateSimple() {
+        return simpleModule.instantiate();
     }
 
     @Benchmark
-    public void instantiateWithImports(Blackhole bh) {
-        if (!available) return;
-        Instance instance = importModule.instantiate(linkingContext);
-        bh.consume(instance);
+    public Instance instantiateWithImports() {
+        return importModule.instantiate(linkingContext);
     }
 }

@@ -5,7 +5,6 @@ import ai.tegmentum.webassembly4j.api.Function;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Module;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -21,24 +20,27 @@ public class EndToEndBenchmark {
     private String variant;
 
     private EngineVariant engineVariant;
-    private boolean available;
+    private int counter;
 
     @Setup(Level.Trial)
     public void setup() {
         engineVariant = EngineVariant.valueOf(variant);
-        available = BenchmarkSupport.isAvailable(engineVariant);
+        if (!BenchmarkSupport.isAvailable(engineVariant)) {
+            throw new IllegalStateException("Engine variant " + variant + " is not available");
+        }
+        counter = 0;
     }
 
     @Benchmark
-    public void fullLifecycle(Blackhole bh) {
-        if (!available) return;
+    public Object fullLifecycle() {
+        int a = counter++;
         try (Engine engine = BenchmarkSupport.createEngine(engineVariant)) {
             Module module = engine.loadModule(BenchmarkModules.ADD_MODULE);
             Instance instance = module.instantiate();
             Function add = instance.function("add").orElseThrow();
-            Object result = add.invoke(3, 4);
-            bh.consume(result);
+            Object result = add.invoke(a, a + 1);
             module.close();
+            return result;
         }
     }
 }

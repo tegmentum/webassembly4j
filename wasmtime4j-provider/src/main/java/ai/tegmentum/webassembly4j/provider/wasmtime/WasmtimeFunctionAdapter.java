@@ -13,10 +13,44 @@ import java.util.List;
 
 final class WasmtimeFunctionAdapter implements Function {
 
+    private enum FastPath { V_V, V_I, I_I, II_I, I_V, J_J, GENERIC }
+
     private final WasmFunction nativeFunction;
+    private volatile FastPath cachedFastPath;
 
     WasmtimeFunctionAdapter(WasmFunction nativeFunction) {
         this.nativeFunction = nativeFunction;
+    }
+
+    private FastPath resolveFastPath() {
+        FastPath fp = cachedFastPath;
+        if (fp != null) {
+            return fp;
+        }
+        FunctionType type = nativeFunction.getFunctionType();
+        fp = classifySignature(type.getParams(), type.getResults());
+        cachedFastPath = fp;
+        return fp;
+    }
+
+    private static FastPath classifySignature(List<WasmValueType> params,
+                                              List<WasmValueType> results) {
+        boolean voidReturn = results.isEmpty();
+        boolean i32Return = results.size() == 1 && results.get(0) == WasmValueType.I32;
+        boolean i64Return = results.size() == 1 && results.get(0) == WasmValueType.I64;
+
+        if (voidReturn && params.isEmpty()) return FastPath.V_V;
+        if (voidReturn && params.size() == 1 && params.get(0) == WasmValueType.I32)
+            return FastPath.I_V;
+        if (i32Return && params.isEmpty()) return FastPath.V_I;
+        if (i32Return && params.size() == 1 && params.get(0) == WasmValueType.I32)
+            return FastPath.I_I;
+        if (i32Return && params.size() == 2
+                && params.get(0) == WasmValueType.I32 && params.get(1) == WasmValueType.I32)
+            return FastPath.II_I;
+        if (i64Return && params.size() == 1 && params.get(0) == WasmValueType.I64)
+            return FastPath.J_J;
+        return FastPath.GENERIC;
     }
 
     @Override
@@ -33,25 +67,51 @@ final class WasmtimeFunctionAdapter implements Function {
 
     @Override
     public Object invoke(Object... args) {
-        WasmValue[] wasmArgs = convertToWasmValues(args);
         try {
-            WasmValue[] results = nativeFunction.call(wasmArgs);
-            if (results.length == 0) {
-                return null;
-            }
-            if (results.length == 1) {
-                return extractValue(results[0]);
-            }
-            Object[] extracted = new Object[results.length];
-            for (int i = 0; i < results.length; i++) {
-                extracted[i] = extractValue(results[i]);
-            }
-            return extracted;
+            return invokeFastPath(args);
         } catch (ai.tegmentum.wasmtime4j.exception.TrapException e) {
             throw new TrapException(e.getMessage(), e);
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new ExecutionException(e.getMessage(), e);
         }
+    }
+
+    private Object invokeFastPath(Object[] args) throws ai.tegmentum.wasmtime4j.exception.WasmException {
+        switch (resolveFastPath()) {
+            case V_V:
+                nativeFunction.callVoid();
+                return null;
+            case V_I:
+                return nativeFunction.callToI32();
+            case I_V:
+                nativeFunction.callVoid();
+                return null;
+            case I_I:
+                return nativeFunction.callI32ToI32(((Number) args[0]).intValue());
+            case II_I:
+                return nativeFunction.callI32I32ToI32(
+                        ((Number) args[0]).intValue(), ((Number) args[1]).intValue());
+            case J_J:
+                return nativeFunction.callI64ToI64(((Number) args[0]).longValue());
+            default:
+                return invokeGeneric(args);
+        }
+    }
+
+    private Object invokeGeneric(Object[] args) throws ai.tegmentum.wasmtime4j.exception.WasmException {
+        WasmValue[] wasmArgs = convertToWasmValues(args);
+        WasmValue[] results = nativeFunction.call(wasmArgs);
+        if (results.length == 0) {
+            return null;
+        }
+        if (results.length == 1) {
+            return extractValue(results[0]);
+        }
+        Object[] extracted = new Object[results.length];
+        for (int i = 0; i < results.length; i++) {
+            extracted[i] = extractValue(results[i]);
+        }
+        return extracted;
     }
 
     private WasmValue[] convertToWasmValues(Object[] args) {
