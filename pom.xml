@@ -45,6 +45,9 @@
         <module>chicory4j-provider</module>
         <module>graalwasm4j-provider</module>
         <module>webassembly4j-runtime</module>
+        <module>webassembly4j-testing</module>
+        <module>webassembly4j-pool</module>
+        <module>webassembly4j-spring</module>
         <module>webassembly4j-benchmarks</module>
         <module>webassembly4j-bindgen</module>
     </modules>
@@ -64,6 +67,7 @@
         <graalvm.version>24.1.1</graalvm.version>
         <jmh.version>1.37</jmh.version>
         <jackson.version>2.15.2</jackson.version>
+        <spring-boot.version>3.2.5</spring-boot.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
@@ -119,6 +123,21 @@
             <dependency>
                 <groupId>ai.tegmentum.webassembly4j</groupId>
                 <artifactId>webassembly4j-runtime</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.webassembly4j</groupId>
+                <artifactId>webassembly4j-testing</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.webassembly4j</groupId>
+                <artifactId>webassembly4j-pool</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.webassembly4j</groupId>
+                <artifactId>webassembly4j-spring</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
