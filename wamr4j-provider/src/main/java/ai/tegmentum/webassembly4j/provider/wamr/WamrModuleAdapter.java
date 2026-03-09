@@ -2,7 +2,9 @@ package ai.tegmentum.webassembly4j.provider.wamr;
 
 import ai.tegmentum.wamr4j.FunctionSignature;
 import ai.tegmentum.wamr4j.WebAssemblyModule;
+import ai.tegmentum.webassembly4j.api.ExportDescriptor;
 import ai.tegmentum.webassembly4j.api.HostFunctionDefinition;
+import ai.tegmentum.webassembly4j.api.ImportDescriptor;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.Module;
@@ -11,6 +13,8 @@ import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
 import ai.tegmentum.webassembly4j.api.exception.LinkingException;
 import ai.tegmentum.webassembly4j.provider.wamr.config.WamrConfig;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -151,6 +155,93 @@ final class WamrModuleAdapter implements Module {
             case F32: return ai.tegmentum.wamr4j.ValueType.F32;
             case F64: return ai.tegmentum.wamr4j.ValueType.F64;
             default: throw new IllegalArgumentException("Unsupported WAMR type: " + type);
+        }
+    }
+
+    @Override
+    public List<ExportDescriptor> exports() {
+        String[] exportNames = nativeModule.getExportNames();
+        if (exportNames == null || exportNames.length == 0) {
+            return Collections.emptyList();
+        }
+        List<ExportDescriptor> result = new ArrayList<>(exportNames.length);
+        for (String name : exportNames) {
+            try {
+                FunctionSignature sig = nativeModule.getExportFunctionSignature(name);
+                if (sig != null) {
+                    result.add(ExportDescriptor.function(name,
+                            convertFromWamrTypes(sig.getParameterTypes()),
+                            convertFromWamrTypes(sig.getReturnTypes())));
+                    continue;
+                }
+            } catch (Exception ignored) {
+                // Not a function export
+            }
+            try {
+                int[] memInfo = nativeModule.getExportMemoryTypeInfo(name);
+                if (memInfo != null) {
+                    result.add(ExportDescriptor.memory(name));
+                    continue;
+                }
+            } catch (Exception ignored) {
+                // Not a memory export
+            }
+            try {
+                int[] globalInfo = nativeModule.getExportGlobalTypeInfo(name);
+                if (globalInfo != null && globalInfo.length >= 1) {
+                    result.add(ExportDescriptor.global(name,
+                            convertWamrValKind(globalInfo[0])));
+                    continue;
+                }
+            } catch (Exception ignored) {
+                // Not a global export
+            }
+            result.add(ExportDescriptor.table(name));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    @Override
+    public List<ImportDescriptor> imports() {
+        String[] importNames = nativeModule.getImportNames();
+        if (importNames == null || importNames.length == 0) {
+            return Collections.emptyList();
+        }
+        List<ImportDescriptor> result = new ArrayList<>(importNames.length);
+        for (String fullName : importNames) {
+            int dotIdx = fullName.indexOf('.');
+            String moduleName = dotIdx >= 0 ? fullName.substring(0, dotIdx) : "";
+            String name = dotIdx >= 0 ? fullName.substring(dotIdx + 1) : fullName;
+            result.add(ImportDescriptor.function(moduleName, name,
+                    new ValueType[0], new ValueType[0]));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    private static ValueType[] convertFromWamrTypes(ai.tegmentum.wamr4j.ValueType[] types) {
+        if (types == null) return new ValueType[0];
+        ValueType[] result = new ValueType[types.length];
+        for (int i = 0; i < types.length; i++) {
+            result[i] = convertFromWamrType(types[i]);
+        }
+        return result;
+    }
+
+    private static ValueType convertFromWamrType(ai.tegmentum.wamr4j.ValueType type) {
+        if (type == ai.tegmentum.wamr4j.ValueType.I32) return ValueType.I32;
+        if (type == ai.tegmentum.wamr4j.ValueType.I64) return ValueType.I64;
+        if (type == ai.tegmentum.wamr4j.ValueType.F32) return ValueType.F32;
+        if (type == ai.tegmentum.wamr4j.ValueType.F64) return ValueType.F64;
+        return ValueType.I32;
+    }
+
+    private static ValueType convertWamrValKind(int valKind) {
+        switch (valKind) {
+            case 0: return ValueType.I32;
+            case 1: return ValueType.I64;
+            case 2: return ValueType.F32;
+            case 3: return ValueType.F64;
+            default: return ValueType.I32;
         }
     }
 

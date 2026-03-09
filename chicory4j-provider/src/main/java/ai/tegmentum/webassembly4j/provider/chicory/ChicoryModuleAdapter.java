@@ -1,6 +1,8 @@
 package ai.tegmentum.webassembly4j.provider.chicory;
 
+import ai.tegmentum.webassembly4j.api.ExportDescriptor;
 import ai.tegmentum.webassembly4j.api.HostFunctionDefinition;
+import ai.tegmentum.webassembly4j.api.ImportDescriptor;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.Module;
@@ -10,9 +12,15 @@ import ai.tegmentum.webassembly4j.api.exception.LinkingException;
 import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.wasm.WasmModule;
+import com.dylibso.chicory.wasm.types.Export;
+import com.dylibso.chicory.wasm.types.ExternalType;
+import com.dylibso.chicory.wasm.types.FunctionImport;
+import com.dylibso.chicory.wasm.types.FunctionType;
+import com.dylibso.chicory.wasm.types.Import;
 import com.dylibso.chicory.wasm.types.Value;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 final class ChicoryModuleAdapter implements Module {
@@ -132,6 +140,115 @@ final class ChicoryModuleAdapter implements Module {
             }
         }
         return result;
+    }
+
+    @Override
+    public List<ExportDescriptor> exports() {
+        int count = wasmModule.exportSection().exportCount();
+        if (count == 0) {
+            return Collections.emptyList();
+        }
+        List<ExportDescriptor> result = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            Export export = wasmModule.exportSection().getExport(i);
+            result.add(convertExport(export));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    @Override
+    public List<ImportDescriptor> imports() {
+        int count = wasmModule.importSection().importCount();
+        if (count == 0) {
+            return Collections.emptyList();
+        }
+        List<ImportDescriptor> result = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            Import imp = wasmModule.importSection().getImport(i);
+            result.add(convertImport(imp));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    private ExportDescriptor convertExport(Export export) {
+        ExternalType type = export.exportType();
+        switch (type) {
+            case FUNCTION:
+                return convertFunctionExport(export);
+            case MEMORY:
+                return ExportDescriptor.memory(export.name());
+            case TABLE:
+                return ExportDescriptor.table(export.name());
+            case GLOBAL:
+                return ExportDescriptor.global(export.name(), ValueType.I32);
+            default:
+                return ExportDescriptor.memory(export.name());
+        }
+    }
+
+    private ExportDescriptor convertFunctionExport(Export export) {
+        int index = export.index();
+        int importedFuncCount = wasmModule.importSection().count(ExternalType.FUNCTION);
+        if (index < importedFuncCount) {
+            // This export refers to an imported function
+            return ExportDescriptor.function(export.name(),
+                    new ValueType[0], new ValueType[0]);
+        }
+        int localIndex = index - importedFuncCount;
+        if (localIndex < wasmModule.functionSection().functionCount()) {
+            FunctionType funcType = wasmModule.functionSection()
+                    .getFunctionType(localIndex, wasmModule.typeSection());
+            return ExportDescriptor.function(export.name(),
+                    convertChicoryTypes(funcType.params()),
+                    convertChicoryTypes(funcType.returns()));
+        }
+        return ExportDescriptor.function(export.name(),
+                new ValueType[0], new ValueType[0]);
+    }
+
+    private ImportDescriptor convertImport(Import imp) {
+        ExternalType type = imp.importType();
+        switch (type) {
+            case FUNCTION:
+                FunctionImport funcImport = (FunctionImport) imp;
+                int typeIdx = funcImport.typeIndex();
+                if (typeIdx < wasmModule.typeSection().typeCount()) {
+                    FunctionType funcType = wasmModule.typeSection().getType(typeIdx);
+                    return ImportDescriptor.function(imp.module(), imp.name(),
+                            convertChicoryTypes(funcType.params()),
+                            convertChicoryTypes(funcType.returns()));
+                }
+                return ImportDescriptor.function(imp.module(), imp.name(),
+                        new ValueType[0], new ValueType[0]);
+            case MEMORY:
+                return ImportDescriptor.memory(imp.module(), imp.name());
+            case TABLE:
+                return ImportDescriptor.table(imp.module(), imp.name());
+            case GLOBAL:
+                return ImportDescriptor.global(imp.module(), imp.name(), ValueType.I32);
+            default:
+                return ImportDescriptor.memory(imp.module(), imp.name());
+        }
+    }
+
+    private static ValueType[] convertChicoryTypes(
+            List<com.dylibso.chicory.wasm.types.ValueType> types) {
+        ValueType[] result = new ValueType[types.size()];
+        for (int i = 0; i < types.size(); i++) {
+            result[i] = convertChicoryType(types.get(i));
+        }
+        return result;
+    }
+
+    private static ValueType convertChicoryType(com.dylibso.chicory.wasm.types.ValueType type) {
+        if (type == com.dylibso.chicory.wasm.types.ValueType.I32) return ValueType.I32;
+        if (type == com.dylibso.chicory.wasm.types.ValueType.I64) return ValueType.I64;
+        if (type == com.dylibso.chicory.wasm.types.ValueType.F32) return ValueType.F32;
+        if (type == com.dylibso.chicory.wasm.types.ValueType.F64) return ValueType.F64;
+        if (type == com.dylibso.chicory.wasm.types.ValueType.V128) return ValueType.V128;
+        if (type == com.dylibso.chicory.wasm.types.ValueType.FuncRef) return ValueType.FUNCREF;
+        if (type == com.dylibso.chicory.wasm.types.ValueType.ExternRef) return ValueType.EXTERNREF;
+        return ValueType.I32;
     }
 
     @Override

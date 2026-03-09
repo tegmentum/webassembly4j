@@ -4,14 +4,24 @@ import ai.tegmentum.wasmtime4j.Linker;
 import ai.tegmentum.wasmtime4j.WasmRuntime;
 import ai.tegmentum.wasmtime4j.WasmValue;
 import ai.tegmentum.wasmtime4j.WasmValueType;
+import ai.tegmentum.wasmtime4j.type.ExportType;
+import ai.tegmentum.wasmtime4j.type.FuncType;
 import ai.tegmentum.wasmtime4j.type.FunctionType;
+import ai.tegmentum.wasmtime4j.type.ImportType;
+import ai.tegmentum.wasmtime4j.type.WasmType;
+import ai.tegmentum.wasmtime4j.type.WasmTypeKind;
+import ai.tegmentum.webassembly4j.api.ExportDescriptor;
+import ai.tegmentum.webassembly4j.api.ExternType;
 import ai.tegmentum.webassembly4j.api.HostFunctionDefinition;
+import ai.tegmentum.webassembly4j.api.ImportDescriptor;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.ValueType;
 import ai.tegmentum.webassembly4j.api.exception.LinkingException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -89,6 +99,85 @@ final class WasmtimeModuleAdapter implements Module {
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new LinkingException("Failed to instantiate with linking context", e);
         }
+    }
+
+    @Override
+    public List<ExportDescriptor> exports() {
+        List<ExportType> nativeExports = nativeModule.getExports();
+        List<ExportDescriptor> result = new ArrayList<>(nativeExports.size());
+        for (ExportType export : nativeExports) {
+            result.add(convertExport(export));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    @Override
+    public List<ImportDescriptor> imports() {
+        List<ImportType> nativeImports = nativeModule.getImports();
+        List<ImportDescriptor> result = new ArrayList<>(nativeImports.size());
+        for (ImportType imp : nativeImports) {
+            result.add(convertImport(imp));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    private static ExportDescriptor convertExport(ExportType export) {
+        WasmType type = export.getType();
+        WasmTypeKind kind = type.getKind();
+        switch (kind) {
+            case FUNCTION:
+                FuncType funcType = (FuncType) type;
+                return ExportDescriptor.function(export.getName(),
+                        convertWasmValueTypes(funcType.getParams()),
+                        convertWasmValueTypes(funcType.getResults()));
+            case MEMORY:
+                return ExportDescriptor.memory(export.getName());
+            case TABLE:
+                return ExportDescriptor.table(export.getName());
+            case GLOBAL:
+                return ExportDescriptor.global(export.getName(), ValueType.I32);
+            default:
+                return ExportDescriptor.memory(export.getName());
+        }
+    }
+
+    private static ImportDescriptor convertImport(ImportType imp) {
+        WasmType type = imp.getType();
+        WasmTypeKind kind = type.getKind();
+        switch (kind) {
+            case FUNCTION:
+                FuncType funcType = (FuncType) type;
+                return ImportDescriptor.function(imp.getModuleName(), imp.getName(),
+                        convertWasmValueTypes(funcType.getParams()),
+                        convertWasmValueTypes(funcType.getResults()));
+            case MEMORY:
+                return ImportDescriptor.memory(imp.getModuleName(), imp.getName());
+            case TABLE:
+                return ImportDescriptor.table(imp.getModuleName(), imp.getName());
+            case GLOBAL:
+                return ImportDescriptor.global(imp.getModuleName(), imp.getName(), ValueType.I32);
+            default:
+                return ImportDescriptor.memory(imp.getModuleName(), imp.getName());
+        }
+    }
+
+    private static ValueType[] convertWasmValueTypes(List<WasmValueType> types) {
+        ValueType[] result = new ValueType[types.size()];
+        for (int i = 0; i < types.size(); i++) {
+            result[i] = convertFromWasmValueType(types.get(i));
+        }
+        return result;
+    }
+
+    private static ValueType convertFromWasmValueType(WasmValueType type) {
+        if (type == WasmValueType.I32) return ValueType.I32;
+        if (type == WasmValueType.I64) return ValueType.I64;
+        if (type == WasmValueType.F32) return ValueType.F32;
+        if (type == WasmValueType.F64) return ValueType.F64;
+        if (type == WasmValueType.V128) return ValueType.V128;
+        if (type == WasmValueType.FUNCREF) return ValueType.FUNCREF;
+        if (type == WasmValueType.EXTERNREF) return ValueType.EXTERNREF;
+        return ValueType.I32;
     }
 
     @Override
