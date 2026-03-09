@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Test on all platforms before publishing
+  test:
+    name: Test Java ${{ matrix.java }} (${{ matrix.os }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            java: '11'
+          - os: ubuntu-latest
+            java: '21'
+          - os: ubuntu-24.04-arm
+            java: '11'
+          - os: ubuntu-24.04-arm
+            java: '21'
+          - os: macos-latest
+            java: '11'
+          - os: macos-latest
+            java: '21'
+          - os: windows-latest
+            java: '11'
+          - os: windows-latest
+            java: '21'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-release-${{ matrix.os }}-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-release-${{ matrix.os }}-
+
+      - name: Run tests (Java 11 — core modules only)
+        if: matrix.java == '11'
+        shell: bash
+        run: |
+          ./mvnw test -B -q \
+            -pl webassembly4j-api,webassembly4j-spi,chicory4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-bindgen \
+            -am
+
+      - name: Run tests (Java 17+ — all modules)
+        if: matrix.java != '11'
+        shell: bash
+        run: |
+          ./mvnw test -B -q \
+            -pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen \
+            -am
+
+  # Publish to Maven Central and GitHub Packages
+  publish:
+    name: Publish
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-publish-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-publish-
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          ./mvnw deploy -B \
+            -DskipTests \
+            -Drevision=${{ steps.version.outputs.version }}
+
+      - name: Deploy to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings-github.xml <<'SETTINGS'
+          <settings>
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${env.GITHUB_ACTOR}</username>
+                <password>${env.GITHUB_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          SETTINGS
+          ./mvnw deploy -B \
+            -DskipTests \
+            -Drevision=${{ steps.version.outputs.version }} \
+            -DaltDeploymentRepository=github::https://maven.pkg.github.com/${{ github.repository }} \
+            -Dgpg.skip=true \
+            -s ~/.m2/settings-github.xml
+
+      - name: Package artifacts
+        run: |
+          ./mvnw package -B \
+            -DskipTests \
+            -Drevision=${{ steps.version.outputs.version }}
+
+      - name: Create checksums
+        run: |
+          for dir in */target; do
+            if [ -d "$dir" ]; then
+              for jar in "$dir"/*.jar; do
+                [ -f "$jar" ] && sha256sum "$jar" > "$jar.sha256"
+              done
+            fi
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            webassembly4j-api/target/*.jar
+            webassembly4j-api/target/*.jar.sha256
+            webassembly4j-spi/target/*.jar
+            webassembly4j-spi/target/*.jar.sha256
+            webassembly4j-runtime/target/*.jar
+            webassembly4j-runtime/target/*.jar.sha256
+            webassembly4j-testing/target/*.jar
+            webassembly4j-testing/target/*.jar.sha256
+            webassembly4j-pool/target/*.jar
+            webassembly4j-pool/target/*.jar.sha256
+            webassembly4j-spring/target/*.jar
+            webassembly4j-spring/target/*.jar.sha256
+            webassembly4j-bindgen/target/*.jar
+            webassembly4j-bindgen/target/*.jar.sha256
