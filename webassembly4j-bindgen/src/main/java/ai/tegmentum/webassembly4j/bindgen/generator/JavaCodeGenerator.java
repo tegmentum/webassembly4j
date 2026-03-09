@@ -82,6 +82,12 @@ public abstract class JavaCodeGenerator {
       }
     }
 
+    // Generate implementation classes if enabled
+    if (config.isGenerateImplementations() && !model.getInterfaces().isEmpty()) {
+      ImplementationCodeGenerator implGen = new ImplementationCodeGenerator(config);
+      sources.addAll(implGen.generate(model.getInterfaces()));
+    }
+
     return sources;
   }
 

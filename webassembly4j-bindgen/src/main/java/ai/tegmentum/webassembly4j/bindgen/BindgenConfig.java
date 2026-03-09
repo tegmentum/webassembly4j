@@ -48,6 +48,8 @@ public final class BindgenConfig {
   private final List<Path> wasmSources;
   private final boolean generateJavadoc;
   private final boolean generateBuilders;
+  private final boolean generateImplementations;
+  private final boolean generateServiceLoader;
 
   private BindgenConfig(final Builder builder) {
     this.codeStyle = builder.codeStyle;
@@ -57,6 +59,8 @@ public final class BindgenConfig {
     this.wasmSources = Collections.unmodifiableList(new ArrayList<>(builder.wasmSources));
     this.generateJavadoc = builder.generateJavadoc;
     this.generateBuilders = builder.generateBuilders;
+    this.generateImplementations = builder.generateImplementations;
+    this.generateServiceLoader = builder.generateServiceLoader;
   }
 
   /**
@@ -132,6 +136,24 @@ public final class BindgenConfig {
   }
 
   /**
+   * Returns whether implementation classes should be generated for interfaces.
+   *
+   * @return true if implementations should be generated
+   */
+  public boolean isGenerateImplementations() {
+    return generateImplementations;
+  }
+
+  /**
+   * Returns whether ServiceLoader registration files should be generated.
+   *
+   * @return true if ServiceLoader files should be generated
+   */
+  public boolean isGenerateServiceLoader() {
+    return generateServiceLoader;
+  }
+
+  /**
    * Checks if there are WIT sources configured.
    *
    * @return true if WIT sources exist
@@ -178,6 +200,8 @@ public final class BindgenConfig {
     BindgenConfig that = (BindgenConfig) obj;
     return generateJavadoc == that.generateJavadoc
         && generateBuilders == that.generateBuilders
+        && generateImplementations == that.generateImplementations
+        && generateServiceLoader == that.generateServiceLoader
         && codeStyle == that.codeStyle
         && Objects.equals(packageName, that.packageName)
         && Objects.equals(outputDirectory, that.outputDirectory)
@@ -194,7 +218,9 @@ public final class BindgenConfig {
         witSources,
         wasmSources,
         generateJavadoc,
-        generateBuilders);
+        generateBuilders,
+        generateImplementations,
+        generateServiceLoader);
   }
 
   @Override
@@ -217,6 +243,10 @@ public final class BindgenConfig {
         + generateJavadoc
         + ", generateBuilders="
         + generateBuilders
+        + ", generateImplementations="
+        + generateImplementations
+        + ", generateServiceLoader="
+        + generateServiceLoader
         + '}';
   }
 
@@ -230,6 +260,8 @@ public final class BindgenConfig {
     private List<Path> wasmSources = new ArrayList<>();
     private boolean generateJavadoc = true;
     private boolean generateBuilders = true;
+    private boolean generateImplementations = true;
+    private boolean generateServiceLoader = true;
 
     private Builder() {}
 
@@ -329,6 +361,28 @@ public final class BindgenConfig {
      */
     public Builder generateBuilders(final boolean generate) {
       this.generateBuilders = generate;
+      return this;
+    }
+
+    /**
+     * Sets whether to generate implementation classes for interfaces.
+     *
+     * @param generate true to generate implementations
+     * @return this builder
+     */
+    public Builder generateImplementations(final boolean generate) {
+      this.generateImplementations = generate;
+      return this;
+    }
+
+    /**
+     * Sets whether to generate ServiceLoader registration files.
+     *
+     * @param generate true to generate ServiceLoader files
+     * @return this builder
+     */
+    public Builder generateServiceLoader(final boolean generate) {
+      this.generateServiceLoader = generate;
       return this;
     }
 

@@ -44,6 +44,7 @@
         <module>wamr4j-provider</module>
         <module>chicory4j-provider</module>
         <module>graalwasm4j-provider</module>
+        <module>webassembly4j-runtime</module>
         <module>webassembly4j-benchmarks</module>
         <module>webassembly4j-bindgen</module>
     </modules>
@@ -114,6 +115,11 @@
                 <artifactId>wasm-community</artifactId>
                 <version>${graalvm.version}</version>
                 <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.webassembly4j</groupId>
+                <artifactId>webassembly4j-runtime</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.openjdk.jmh</groupId>

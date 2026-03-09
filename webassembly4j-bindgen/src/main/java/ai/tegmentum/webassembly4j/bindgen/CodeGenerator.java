@@ -16,6 +16,7 @@
 
 package ai.tegmentum.webassembly4j.bindgen;
 
+import ai.tegmentum.webassembly4j.bindgen.generator.ImplementationCodeGenerator;
 import ai.tegmentum.webassembly4j.bindgen.generator.JavaCodeGenerator;
 import ai.tegmentum.webassembly4j.bindgen.generator.LegacyCodeGenerator;
 import ai.tegmentum.webassembly4j.bindgen.generator.ModernCodeGenerator;
@@ -122,6 +123,9 @@ public final class CodeGenerator {
   /**
    * Generates Java source files and writes them to the output directory.
    *
+   * <p>If implementation generation and ServiceLoader registration are enabled,
+   * also writes the {@code META-INF/services} file.
+   *
    * @throws BindgenException if generation or writing fails
    */
   public void generateAndWrite() throws BindgenException {
@@ -132,6 +136,22 @@ public final class CodeGenerator {
     for (GeneratedSource source : sources) {
       source.writeTo(outputDir);
       LOGGER.fine("Wrote " + source.getQualifiedName());
+    }
+
+    // Write ServiceLoader registration file
+    if (config.isGenerateImplementations() && config.isGenerateServiceLoader()) {
+      List<BindgenInterface> allInterfaces = new ArrayList<>();
+      if (config.hasWitSources()) {
+        for (Path witPath : config.getWitSources()) {
+          BindgenModel model = parseWitSource(witPath);
+          allInterfaces.addAll(model.getInterfaces());
+        }
+      }
+      if (!allInterfaces.isEmpty()) {
+        ImplementationCodeGenerator implGen = new ImplementationCodeGenerator(config);
+        implGen.writeServiceLoaderFile(outputDir, allInterfaces);
+        LOGGER.info("Wrote ServiceLoader registration file");
+      }
     }
   }
 
