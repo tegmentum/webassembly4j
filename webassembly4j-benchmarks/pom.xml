@@ -30,6 +30,18 @@
         <jmh.timeUnit>s</jmh.timeUnit>
         <jmh.output>benchmarks.txt</jmh.output>
         <jmh.resultFormat>TEXT</jmh.resultFormat>
+
+        <!-- Load test properties -->
+        <loadtest.duration>30</loadtest.duration>
+        <loadtest.threads>4</loadtest.threads>
+        <loadtest.warmup>5</loadtest.warmup>
+        <loadtest.workload>add</loadtest.workload>
+        <loadtest.output>target/load-test-results.json</loadtest.output>
+
+        <!-- Chart report properties -->
+        <chart.jmh>target/benchmark-results.json</chart.jmh>
+        <chart.load>target/load-test-results.json</chart.load>
+        <chart.output>target/benchmark-report.html</chart.output>
     </properties>
 
     <dependencies>
@@ -137,6 +149,58 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>default-cli</id>
+                        <configuration>
+                            <mainClass>org.openjdk.jmh.Main</mainClass>
+                            <commandlineArgs>
+                                -i ${jmh.iterations}
+                                -wi ${jmh.warmupIterations}
+                                -f ${jmh.forks}
+                                -t ${jmh.threads}
+                                -bm ${jmh.mode}
+                                -tu ${jmh.timeUnit}
+                                -o ${jmh.output}
+                                -rf ${jmh.resultFormat}
+                                ${jmh.benchmarks}
+                            </commandlineArgs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>load-test</id>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>ai.tegmentum.webassembly4j.benchmarks.LoadTestRunner</mainClass>
+                            <arguments>
+                                <argument>--duration</argument>
+                                <argument>${loadtest.duration}</argument>
+                                <argument>--threads</argument>
+                                <argument>${loadtest.threads}</argument>
+                                <argument>--warmup</argument>
+                                <argument>${loadtest.warmup}</argument>
+                                <argument>--workload</argument>
+                                <argument>${loadtest.workload}</argument>
+                                <argument>--output</argument>
+                                <argument>${loadtest.output}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>chart-report</id>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>ai.tegmentum.webassembly4j.benchmarks.ChartReportGenerator</mainClass>
+                            <arguments>
+                                <argument>--jmh</argument>
+                                <argument>${chart.jmh}</argument>
+                                <argument>--load</argument>
+                                <argument>${chart.load}</argument>
+                                <argument>${chart.output}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
                 <configuration>
                     <mainClass>org.openjdk.jmh.Main</mainClass>
                     <commandlineArgs>
@@ -226,6 +290,26 @@
             <properties>
                 <jmh.resultFormat>JSON</jmh.resultFormat>
                 <jmh.output>target/benchmark-results.json</jmh.output>
+            </properties>
+        </profile>
+
+        <!-- Load test (quick) -->
+        <profile>
+            <id>load-test-quick</id>
+            <properties>
+                <loadtest.duration>10</loadtest.duration>
+                <loadtest.warmup>2</loadtest.warmup>
+                <loadtest.threads>2</loadtest.threads>
+            </properties>
+        </profile>
+
+        <!-- Load test (production) -->
+        <profile>
+            <id>load-test-production</id>
+            <properties>
+                <loadtest.duration>60</loadtest.duration>
+                <loadtest.warmup>10</loadtest.warmup>
+                <loadtest.threads>8</loadtest.threads>
             </properties>
         </profile>
     </profiles>
