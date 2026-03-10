@@ -29,6 +29,9 @@ public final class BenchmarkSupport {
     }
 
     public static boolean isAvailable(EngineVariant variant) {
+        if (!variant.isApplicableToCurrentJdk()) {
+            return false;
+        }
         if (variant.systemProperty() != null) {
             System.setProperty(variant.systemProperty(), variant.propertyValue());
         }
