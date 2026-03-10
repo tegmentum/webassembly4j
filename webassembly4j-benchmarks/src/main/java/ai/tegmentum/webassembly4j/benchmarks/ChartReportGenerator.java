@@ -48,19 +48,26 @@ public final class ChartReportGenerator {
 
     public static void main(String[] args) throws IOException {
         String jmhFile = null;
-        String loadFile = null;
+        List<String[]> loadFiles = new ArrayList<>(); // [file, label] pairs
         String outputFile = null;
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--jmh": jmhFile = args[++i]; break;
-                case "--load": loadFile = args[++i]; break;
+                case "--load":
+                    String file = args[++i];
+                    String label = null;
+                    if (i + 1 < args.length && !args[i + 1].startsWith("--") && !args[i + 1].endsWith(".html")) {
+                        label = args[++i];
+                    }
+                    loadFiles.add(new String[]{file, label});
+                    break;
                 default: outputFile = args[i]; break;
             }
         }
 
         if (outputFile == null) {
-            System.err.println("Usage: ChartReportGenerator [--jmh results.json] [--load load-test-results.json] output.html");
+            System.err.println("Usage: ChartReportGenerator [--jmh results.json] [--load file.json [label]] ... output.html");
             System.exit(1);
         }
 
@@ -88,12 +95,13 @@ public final class ChartReportGenerator {
             chartId = generateJmhCharts(out, jmhResults, chartId);
         }
 
-        if (loadFile != null) {
-            JsonNode loadResults = mapper.readTree(new File(loadFile));
-            chartId = generateLoadTestCharts(out, loadResults, chartId);
+        for (String[] loadEntry : loadFiles) {
+            JsonNode loadResults = mapper.readTree(new File(loadEntry[0]));
+            String label = loadEntry[1];
+            chartId = generateLoadTestCharts(out, loadResults, chartId, label);
         }
 
-        if (jmhFile == null && loadFile == null) {
+        if (jmhFile == null && loadFiles.isEmpty()) {
             out.println("<p>No input files specified. Use --jmh and/or --load options.</p>");
         }
 
@@ -264,8 +272,9 @@ public final class ChartReportGenerator {
         return chartId;
     }
 
-    private static int generateLoadTestCharts(PrintWriter out, JsonNode loadResults, int chartId) {
-        out.println("<h2>Load Test Results</h2>");
+    private static int generateLoadTestCharts(PrintWriter out, JsonNode loadResults, int chartId, String sectionLabel) {
+        String heading = sectionLabel != null ? "Load Test Results (" + sectionLabel + ")" : "Load Test Results";
+        out.println("<h2>" + escape(heading) + "</h2>");
         out.println("<p>Workload: <strong>" + loadResults.path("workload").asText("unknown") + "</strong>");
         out.println(" | Threads: <strong>" + loadResults.path("threads").asInt() + "</strong>");
         out.println(" | Duration: <strong>" + loadResults.path("durationSeconds").asInt() + "s</strong></p>");
