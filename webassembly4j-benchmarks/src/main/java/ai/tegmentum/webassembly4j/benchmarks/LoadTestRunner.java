@@ -273,16 +273,16 @@ public final class LoadTestRunner {
                 latencyNode.put("unit", "us");
             }
 
-            // Latency histogram (log-scale buckets in microseconds)
+            // Latency histogram (log-scale buckets in nanoseconds for sub-us resolution)
             ObjectNode histogram = result.putObject("histogram");
-            long[] bucketBounds = {1, 2, 5, 10, 20, 50, 100, 200, 500,
-                    1000, 2000, 5000, 10000, 50000, 100000, 500000, 1000000};
-            int[] bucketCounts = new int[bucketBounds.length + 1];
+            long[] bucketBoundsNs = {50, 100, 200, 500, 1000, 2000, 5000,
+                    10_000, 20_000, 50_000, 100_000, 200_000, 500_000,
+                    1_000_000, 5_000_000, 10_000_000};
+            int[] bucketCounts = new int[bucketBoundsNs.length + 1];
             for (long latNs : merged) {
-                long latUs = latNs / 1000;
-                int bucket = bucketBounds.length;
-                for (int b = 0; b < bucketBounds.length; b++) {
-                    if (latUs < bucketBounds[b]) {
+                int bucket = bucketBoundsNs.length;
+                for (int b = 0; b < bucketBoundsNs.length; b++) {
+                    if (latNs < bucketBoundsNs[b]) {
                         bucket = b;
                         break;
                     }
@@ -291,12 +291,12 @@ public final class LoadTestRunner {
             }
             ArrayNode bucketLabels = histogram.putArray("labels");
             ArrayNode bucketValues = histogram.putArray("counts");
-            for (int b = 0; b < bucketBounds.length; b++) {
-                bucketLabels.add("<" + bucketBounds[b] + "us");
+            for (int b = 0; b < bucketBoundsNs.length; b++) {
+                bucketLabels.add("<" + formatNanos(bucketBoundsNs[b]));
                 bucketValues.add(bucketCounts[b]);
             }
-            bucketLabels.add(">=" + bucketBounds[bucketBounds.length - 1] + "us");
-            bucketValues.add(bucketCounts[bucketBounds.length]);
+            bucketLabels.add(">=" + formatNanos(bucketBoundsNs[bucketBoundsNs.length - 1]));
+            bucketValues.add(bucketCounts[bucketBoundsNs.length]);
 
             // Time series
             ArrayNode timeSeries = result.putArray("timeSeries");
@@ -322,6 +322,12 @@ public final class LoadTestRunner {
             fibModule.close();
             engine.close();
         }
+    }
+
+    private static String formatNanos(long ns) {
+        if (ns < 1000) return ns + "ns";
+        if (ns < 1_000_000) return String.format("%.0fus", ns / 1000.0);
+        return String.format("%.0fms", ns / 1_000_000.0);
     }
 
     private static double percentile(long[] sorted, double pct) {
