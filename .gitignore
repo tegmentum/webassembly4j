@@ -32,6 +32,9 @@ Thumbs.db
 *.log
 logs/
 
+# Generated sources
+generated-sources/
+
 # Runtime and build artifacts
 *.class
 *.jar
