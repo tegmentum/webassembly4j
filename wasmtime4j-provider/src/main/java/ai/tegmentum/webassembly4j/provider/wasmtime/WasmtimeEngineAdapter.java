@@ -7,6 +7,7 @@ import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.EngineCapabilities;
 import ai.tegmentum.webassembly4j.api.EngineInfo;
 import ai.tegmentum.webassembly4j.api.Module;
+import ai.tegmentum.wasmtime4j.component.ComponentEngine;
 import ai.tegmentum.webassembly4j.api.config.CommonConfig;
 import ai.tegmentum.webassembly4j.api.config.OptimizationLevel;
 import ai.tegmentum.webassembly4j.api.config.WebAssemblyConfig;
@@ -183,8 +184,17 @@ final class WasmtimeEngineAdapter implements Engine {
 
     @Override
     public Component loadComponent(byte[] bytes) {
-        throw new UnsupportedFeatureException(
-                "Component model support not yet implemented in wasmtime4j provider");
+        try {
+            ComponentEngine componentEngine = runtime.createComponentEngine();
+            ai.tegmentum.wasmtime4j.component.Component nativeComponent =
+                    componentEngine.compileComponent(bytes);
+            ai.tegmentum.wasmtime4j.Store store = engine.createStore();
+            return new WasmtimeComponentAdapter(
+                    runtime, engine, componentEngine, nativeComponent, store);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ai.tegmentum.webassembly4j.api.exception.WebAssemblyException(
+                    "Failed to load WebAssembly component", e);
+        }
     }
 
     @Override
