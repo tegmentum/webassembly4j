@@ -294,10 +294,7 @@ public final class ChartReportGenerator {
         // 3. Latency histogram per variant
         chartId = generateLatencyHistograms(out, variants, chartId);
 
-        // 4. Throughput over time (line chart)
-        chartId = generateThroughputTimeline(out, variants, chartId);
-
-        // 5. Summary table
+        // 4. Summary table
         generateSummaryTable(out, variants);
 
         return chartId;
@@ -448,66 +445,6 @@ public final class ChartReportGenerator {
             out.println("</div>");
         }
 
-        out.println("</div></div>");
-        return chartId;
-    }
-
-    private static int generateThroughputTimeline(PrintWriter out, JsonNode variants, int chartId) {
-        String canvasId = "chart_" + chartId++;
-        out.println("<div class=\"chart-section\">");
-        out.println("<h3>Throughput Over Time</h3>");
-        out.println("<div class=\"chart-container chart-wide\">");
-        out.println("<canvas id=\"" + canvasId + "\"></canvas>");
-        out.println("<script>");
-
-        // Find max time across all variants for x-axis
-        out.printf("new Chart(document.getElementById('%s'), {%n", canvasId);
-        out.println("  type: 'line',");
-        out.println("  data: {");
-        out.println("    datasets: [");
-
-        int dsIdx = 0;
-        for (JsonNode v : variants) {
-            String name = v.get("variant").asText();
-            JsonNode timeSeries = v.get("timeSeries");
-            if (timeSeries == null || timeSeries.size() == 0) continue;
-
-            if (dsIdx > 0) out.println(",");
-            int idx = indexOf(VARIANT_ORDER, name);
-            String color = COLORS[idx >= 0 ? idx % COLORS.length : dsIdx % COLORS.length];
-
-            out.println("      {");
-            out.println("        label: '" + escape(VARIANT_LABELS.getOrDefault(name, name)) + "',");
-            out.print("        data: [");
-            for (int i = 0; i < timeSeries.size(); i++) {
-                JsonNode point = timeSeries.get(i);
-                if (i > 0) out.print(", ");
-                out.printf("{ x: %.1f, y: %.0f }",
-                        point.get("timeSeconds").asDouble(),
-                        point.get("opsPerSecond").asDouble());
-            }
-            out.println("],");
-            out.println("        borderColor: '" + color + "',");
-            out.println("        backgroundColor: '" + color + "22',");
-            out.println("        tension: 0.3,");
-            out.println("        fill: false,");
-            out.println("        pointRadius: 2");
-            out.print("      }");
-            dsIdx++;
-        }
-        out.println();
-        out.println("    ]");
-        out.println("  },");
-        out.println("  options: {");
-        out.println("    responsive: true,");
-        out.println("    plugins: { legend: { position: 'bottom' } },");
-        out.println("    scales: {");
-        out.println("      x: { type: 'linear', title: { display: true, text: 'Time (seconds)' } },");
-        out.println("      y: { beginAtZero: true, title: { display: true, text: 'Operations / second' } }");
-        out.println("    }");
-        out.println("  }");
-        out.println("});");
-        out.println("</script>");
         out.println("</div></div>");
         return chartId;
     }
