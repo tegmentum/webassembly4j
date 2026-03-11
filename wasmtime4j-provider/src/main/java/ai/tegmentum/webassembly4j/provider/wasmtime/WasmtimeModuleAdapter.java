@@ -90,7 +90,12 @@ final class WasmtimeModuleAdapter implements Module {
 
             ai.tegmentum.webassembly4j.api.WasiContext wasiCtx = linkingContext.wasiContext();
             if (wasiCtx != null) {
-                linker.enableWasi();
+                ai.tegmentum.wasmtime4j.wasi.WasiContext nativeWasi = runtime.createWasiContext();
+                configureNativeWasi(nativeWasi, wasiCtx);
+                @SuppressWarnings("unchecked")
+                Linker<ai.tegmentum.wasmtime4j.wasi.WasiContext> wasiLinker =
+                        (Linker<ai.tegmentum.wasmtime4j.wasi.WasiContext>) (Linker<?>) linker;
+                runtime.addWasiToLinker(wasiLinker, nativeWasi);
             }
 
             ai.tegmentum.wasmtime4j.Instance nativeInstance =
@@ -192,6 +197,32 @@ final class WasmtimeModuleAdapter implements Module {
 
     ai.tegmentum.wasmtime4j.Store store() {
         return store;
+    }
+
+    private static void configureNativeWasi(ai.tegmentum.wasmtime4j.wasi.WasiContext nativeWasi,
+                                              ai.tegmentum.webassembly4j.api.WasiContext wasiCtx) {
+        List<String> args = wasiCtx.args();
+        if (!args.isEmpty()) {
+            nativeWasi.setArgv(args.toArray(new String[0]));
+        }
+
+        java.util.Map<String, String> env = wasiCtx.env();
+        if (!env.isEmpty()) {
+            nativeWasi.setEnv(env);
+        }
+
+        if (wasiCtx.inheritStdin() || wasiCtx.inheritStdout() || wasiCtx.inheritStderr()) {
+            nativeWasi.inheritStdio();
+        }
+
+        List<String> preopenDirs = wasiCtx.preopenDirs();
+        for (String dir : preopenDirs) {
+            try {
+                nativeWasi.preopenedDir(java.nio.file.Paths.get(dir), dir);
+            } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+                throw new LinkingException("Failed to preopen directory: " + dir, e);
+            }
+        }
     }
 
     private static WasmValueType[] convertToWasmTypes(ValueType[] types) {
