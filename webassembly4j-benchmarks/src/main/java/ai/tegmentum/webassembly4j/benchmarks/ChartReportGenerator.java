@@ -419,11 +419,14 @@ public final class ChartReportGenerator {
             JsonNode labels = histogram.get("labels");
             JsonNode counts = histogram.get("counts");
 
+            // Filter out empty buckets to focus the chart on the actual distribution
             List<String> labelList = new ArrayList<>();
             List<Integer> countList = new ArrayList<>();
             for (int i = 0; i < labels.size(); i++) {
-                labelList.add(labels.get(i).asText());
-                countList.add(counts.get(i).asInt());
+                if (counts.get(i).asInt() > 0) {
+                    labelList.add(labels.get(i).asText());
+                    countList.add(counts.get(i).asInt());
+                }
             }
 
             out.printf("new Chart(document.getElementById('%s'), {%n", canvasId);
@@ -436,7 +439,7 @@ public final class ChartReportGenerator {
             out.println("    responsive: true,");
             out.println("    plugins: { legend: { display: false } },");
             out.println("    scales: {");
-            out.println("      y: { beginAtZero: true, title: { display: true, text: 'Count' } },");
+            out.println("      y: { type: 'logarithmic', title: { display: true, text: 'Count (log)' } },");
             out.println("      x: { ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 } } }");
             out.println("    }");
             out.println("  }");
