@@ -12,7 +12,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -123,12 +122,8 @@ public final class LoadTestRunner {
         Module fibModule = engine.loadModule(BenchmarkModules.FIBONACCI_MODULE);
 
         try {
-            AtomicBoolean running = new AtomicBoolean(true);
             AtomicLong totalOps = new AtomicLong();
             AtomicLong totalErrors = new AtomicLong();
-
-            // Collect per-second snapshots
-            List<SecondSnapshot> snapshots = Collections.synchronizedList(new ArrayList<>());
 
             // Per-thread latency recording (nanoseconds)
             ConcurrentLinkedQueue<long[]> allLatencies = new ConcurrentLinkedQueue<>();
@@ -139,36 +134,6 @@ public final class LoadTestRunner {
             long startTime = System.nanoTime();
             long warmupEnd = startTime + TimeUnit.SECONDS.toNanos(warmupSec);
             long testEnd = warmupEnd + TimeUnit.SECONDS.toNanos(durationSec);
-
-            // Snapshot collector thread
-            Thread snapshotThread = new Thread(() -> {
-                long lastOps = 0;
-                long lastTime = warmupEnd;
-                // Wait for warmup
-                while (System.nanoTime() < warmupEnd && running.get()) {
-                    try { Thread.sleep(100); } catch (InterruptedException e) { return; }
-                }
-                totalOps.set(0);
-                totalErrors.set(0);
-
-                while (running.get()) {
-                    try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
-                    long now = System.nanoTime();
-                    long currentOps = totalOps.get();
-                    long currentErrors = totalErrors.get();
-                    double elapsed = (now - lastTime) / 1_000_000_000.0;
-                    double opsPerSec = (currentOps - lastOps) / elapsed;
-                    snapshots.add(new SecondSnapshot(
-                            (now - warmupEnd) / 1_000_000_000.0,
-                            opsPerSec,
-                            currentOps,
-                            currentErrors));
-                    lastOps = currentOps;
-                    lastTime = now;
-                }
-            });
-            snapshotThread.setDaemon(true);
-            snapshotThread.start();
 
             // Worker threads
             for (int t = 0; t < threadCount; t++) {
@@ -238,8 +203,6 @@ public final class LoadTestRunner {
             for (Future<?> f : futures) {
                 f.get();
             }
-            running.set(false);
-            snapshotThread.join(2000);
             executor.shutdown();
 
             // Merge and sort all latencies
@@ -298,17 +261,6 @@ public final class LoadTestRunner {
             bucketLabels.add(">=" + formatNanos(bucketBoundsNs[bucketBoundsNs.length - 1]));
             bucketValues.add(bucketCounts[bucketBoundsNs.length]);
 
-            // Time series
-            ArrayNode timeSeries = result.putArray("timeSeries");
-            for (SecondSnapshot snap : snapshots) {
-                ObjectNode point = mapper.createObjectNode();
-                point.put("timeSeconds", Math.round(snap.timeSeconds * 10.0) / 10.0);
-                point.put("opsPerSecond", Math.round(snap.opsPerSecond));
-                point.put("cumulativeOps", snap.cumulativeOps);
-                point.put("cumulativeErrors", snap.cumulativeErrors);
-                timeSeries.add(point);
-            }
-
             System.out.printf("  %s: %.0f ops/s, p50=%.1fus, p99=%.1fus, errors=%d%n",
                     variant,
                     totalOps.get() / (double) durationSec,
@@ -335,17 +287,4 @@ public final class LoadTestRunner {
         return sorted[Math.max(0, Math.min(index, sorted.length - 1))];
     }
 
-    private static final class SecondSnapshot {
-        final double timeSeconds;
-        final double opsPerSecond;
-        final long cumulativeOps;
-        final long cumulativeErrors;
-
-        SecondSnapshot(double timeSeconds, double opsPerSecond, long cumulativeOps, long cumulativeErrors) {
-            this.timeSeconds = timeSeconds;
-            this.opsPerSecond = opsPerSecond;
-            this.cumulativeOps = cumulativeOps;
-            this.cumulativeErrors = cumulativeErrors;
-        }
-    }
 }
