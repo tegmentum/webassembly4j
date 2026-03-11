@@ -6,6 +6,7 @@ import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
 import ai.tegmentum.webassembly4j.api.exception.LinkingException;
+import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
@@ -40,6 +41,11 @@ final class GraalWasmModuleAdapter implements Module {
     public Instance instantiate(LinkingContext linkingContext) {
         if (linkingContext == null) {
             return instantiate();
+        }
+
+        if (linkingContext.wasiContext() != null) {
+            throw new UnsupportedFeatureException(
+                    "WASI is not supported by the GraalWasm provider");
         }
 
         List<HostFunctionDefinition> hostFunctions = linkingContext.hostFunctions();

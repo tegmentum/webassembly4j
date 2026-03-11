@@ -9,6 +9,7 @@ import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.ValueType;
 import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
 import ai.tegmentum.webassembly4j.api.exception.LinkingException;
+import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
 import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.wasm.WasmModule;
@@ -47,6 +48,11 @@ final class ChicoryModuleAdapter implements Module {
     public Instance instantiate(LinkingContext linkingContext) {
         if (linkingContext == null) {
             return instantiate();
+        }
+
+        if (linkingContext.wasiContext() != null) {
+            throw new UnsupportedFeatureException(
+                    "WASI is not supported by the Chicory provider");
         }
 
         List<HostFunctionDefinition> hostFunctions = linkingContext.hostFunctions();
