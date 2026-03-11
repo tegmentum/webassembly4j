@@ -51,7 +51,7 @@ final class WasmtimeModuleAdapter implements Module {
             Linker<Object> linker = runtime.createLinker(engine);
             ai.tegmentum.wasmtime4j.Instance nativeInstance =
                     linker.instantiate(store, nativeModule);
-            return new WasmtimeInstanceAdapter(nativeInstance);
+            return new WasmtimeInstanceAdapter(nativeInstance, runtime, engine);
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new ai.tegmentum.webassembly4j.api.exception.InstantiationException(
                     "Failed to instantiate WebAssembly module", e);
@@ -95,7 +95,7 @@ final class WasmtimeModuleAdapter implements Module {
 
             ai.tegmentum.wasmtime4j.Instance nativeInstance =
                     linker.instantiate(store, nativeModule);
-            return new WasmtimeInstanceAdapter(nativeInstance);
+            return new WasmtimeInstanceAdapter(nativeInstance, runtime, engine);
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new LinkingException("Failed to instantiate with linking context", e);
         }
