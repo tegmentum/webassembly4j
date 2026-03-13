@@ -100,7 +100,7 @@ try (WasmInstance inst = compiled.instantiate()) {
 
 | Module | Description | Java |
 |--------|-------------|------|
-| `webassembly4j-api` | Stable user-facing API | 11+ |
+| `webassembly4j-api` | Stable user-facing API (Multi-Release JAR: 8/11/22) | 8+ |
 | `webassembly4j-spi` | Provider contracts and discovery | 11+ |
 | `webassembly4j-runtime` | High-level runtime with proxy binding and marshalling | 11+ |
 | `webassembly4j-bindgen` | WIT binding generator (Maven plugin + CLI) | 11+ |
@@ -119,6 +119,81 @@ try (WasmInstance inst = compiled.instantiate()) {
 | `chicory4j-provider` | Chicory (pure Java) | 11+ | 50 |
 
 Providers are discovered automatically via `ServiceLoader`. When multiple providers are on the classpath, the one with the highest priority is selected. Add any provider as a dependency and it works -- no configuration needed.
+
+## WasmGC Object Bridge
+
+For languages that compile to WasmGC (Kotlin/Wasm, Dart, OCaml, Java via J2Wasm), the GC bridge provides automatic marshalling between Java objects and WebAssembly GC struct instances -- no linear memory management needed.
+
+### Defining Mappable Types
+
+Annotate a Java class or record with `@GcMapped`:
+
+```java
+@GcMapped
+public record Point(double x, double y) {}
+
+@GcMapped
+public record Line(Point start, Point end) {}
+```
+
+Supported field types: `int`, `long`, `float`, `double`, `boolean`, and nested `@GcMapped` types.
+
+### Marshalling Objects
+
+```java
+GcExtension gc = instance.extension(GcExtension.class)
+    .orElseThrow(() -> new UnsupportedOperationException("GC not supported"));
+GcMarshaller marshaller = GcMarshaller.forExtension(gc);
+
+// Java -> GC struct
+Point p = new Point(3.0, 4.0);
+GcStructInstance struct = marshaller.marshal(p);
+
+// GC struct -> Java
+Point result = marshaller.unmarshal(struct, Point.class);
+```
+
+Nested `@GcMapped` fields are recursively marshalled as GC struct references. Null references are preserved in both directions.
+
+### GC Interface Proxy
+
+`GcProxyFactory` creates interface proxies that automatically marshal `@GcMapped` parameters and return values through GC structs:
+
+```java
+interface Geometry extends AutoCloseable {
+    @WasmExport("rotate_point")
+    Point rotate(Point p, double angle);
+
+    @WasmExport("distance")
+    double distance(Point a, Point b);
+}
+
+GcExtension gc = instance.extension(GcExtension.class).orElseThrow();
+Geometry geom = GcProxyFactory.create(
+    Geometry.class, engine, module, instance, gc);
+
+Point rotated = geom.rotate(new Point(1, 0), Math.PI / 2);
+double dist = geom.distance(new Point(0, 0), new Point(3, 4));
+```
+
+Primitive parameters pass through directly. This is the GC counterpart to `ProxyFactory` which marshals through linear memory.
+
+### Low-Level GC API
+
+For fine-grained control, use the GC extension directly:
+
+```java
+GcStructType pointType = GcStructType.builder("Point")
+    .addField("x", GcFieldType.f64(), true)
+    .addField("y", GcFieldType.f64(), true)
+    .build();
+
+GcStructInstance point = gc.createStruct(pointType,
+    GcValue.f64(3.0), GcValue.f64(4.0));
+
+double x = point.getField(0).asF64();
+point.setField(0, GcValue.f64(5.0));
+```
 
 ## Testing
 
@@ -200,7 +275,7 @@ Supports both modern (Java 17+ records) and legacy (Java 8+ POJOs) code styles.
 ./mvnw clean install
 ```
 
-Core modules require Java 11+. The full build including all providers requires Java 17+.
+The API module targets Java 8+ as a Multi-Release JAR (8/11/22). Core modules require Java 11+. The full build including all providers requires JDK 22+ (for the MRJAR Java 22 overlay compilation).
 
 ## License
 

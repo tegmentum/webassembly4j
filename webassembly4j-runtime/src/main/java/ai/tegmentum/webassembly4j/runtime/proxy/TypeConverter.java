@@ -2,12 +2,12 @@ package ai.tegmentum.webassembly4j.runtime.proxy;
 
 import ai.tegmentum.webassembly4j.api.ValueType;
 
-final class TypeConverter {
+public final class TypeConverter {
 
     private TypeConverter() {
     }
 
-    static ValueType javaTypeToValueType(Class<?> type) {
+    public static ValueType javaTypeToValueType(Class<?> type) {
         if (type == int.class || type == Integer.class) {
             return ValueType.I32;
         } else if (type == long.class || type == Long.class) {
@@ -22,7 +22,7 @@ final class TypeConverter {
                         + ". Supported types: int, long, float, double, String, byte[]");
     }
 
-    static Object fromWasm(Object wasmValue, Class<?> targetType) {
+    public static Object fromWasm(Object wasmValue, Class<?> targetType) {
         if (wasmValue == null) {
             return null;
         }
@@ -42,11 +42,11 @@ final class TypeConverter {
         return wasmValue;
     }
 
-    static boolean isVoid(Class<?> type) {
+    public static boolean isVoid(Class<?> type) {
         return type == void.class || type == Void.class;
     }
 
-    static boolean isSupportedType(Class<?> type) {
+    public static boolean isSupportedType(Class<?> type) {
         return type == int.class || type == Integer.class
                 || type == long.class || type == Long.class
                 || type == float.class || type == Float.class
@@ -57,14 +57,14 @@ final class TypeConverter {
     /**
      * Returns true if the type requires marshalling through linear memory.
      */
-    static boolean isComplexType(Class<?> type) {
+    public static boolean isComplexType(Class<?> type) {
         return type == String.class || type == byte[].class;
     }
 
     /**
      * Returns true if any of the parameter types or the return type requires marshalling.
      */
-    static boolean requiresMarshalling(Class<?>[] paramTypes, Class<?> returnType) {
+    public static boolean requiresMarshalling(Class<?>[] paramTypes, Class<?> returnType) {
         if (isComplexType(returnType)) {
             return true;
         }
