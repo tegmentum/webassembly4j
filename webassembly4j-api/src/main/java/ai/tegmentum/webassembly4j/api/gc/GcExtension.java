@@ -1,6 +1,7 @@
 package ai.tegmentum.webassembly4j.api.gc;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Extension interface for WebAssembly GC (Garbage Collection) support.
@@ -96,6 +97,76 @@ public interface GcExtension {
      * @throws GcException if the value is out of the valid 31-bit range
      */
     GcI31Instance createI31(int value);
+
+    // --- Async struct operations ---
+
+    /**
+     * Asynchronously creates a new struct instance using the runtime's async
+     * resource limiter path. Runtimes that do not support async allocation
+     * delegate to the synchronous {@link #createStruct(GcStructType, GcValue...)}.
+     *
+     * @param type   the struct type
+     * @param values initial field values, one per field in declaration order
+     * @return a future completing with the new struct instance
+     */
+    default CompletableFuture<GcStructInstance> createStructAsync(GcStructType type, GcValue... values) {
+        return CompletableFuture.completedFuture(createStruct(type, values));
+    }
+
+    /**
+     * Asynchronously creates a new struct instance using the runtime's async
+     * resource limiter path. Runtimes that do not support async allocation
+     * delegate to the synchronous {@link #createStruct(GcStructType, List)}.
+     *
+     * @param type   the struct type
+     * @param values initial field values, one per field in declaration order
+     * @return a future completing with the new struct instance
+     */
+    default CompletableFuture<GcStructInstance> createStructAsync(GcStructType type, List<GcValue> values) {
+        return CompletableFuture.completedFuture(createStruct(type, values));
+    }
+
+    // --- Async array operations ---
+
+    /**
+     * Asynchronously creates a new array instance using the runtime's async
+     * resource limiter path. Runtimes that do not support async allocation
+     * delegate to the synchronous {@link #createArray(GcArrayType, GcValue...)}.
+     *
+     * @param type     the array type
+     * @param elements initial element values
+     * @return a future completing with the new array instance
+     */
+    default CompletableFuture<GcArrayInstance> createArrayAsync(GcArrayType type, GcValue... elements) {
+        return CompletableFuture.completedFuture(createArray(type, elements));
+    }
+
+    /**
+     * Asynchronously creates a new array instance using the runtime's async
+     * resource limiter path. Runtimes that do not support async allocation
+     * delegate to the synchronous {@link #createArray(GcArrayType, List)}.
+     *
+     * @param type     the array type
+     * @param elements initial element values
+     * @return a future completing with the new array instance
+     */
+    default CompletableFuture<GcArrayInstance> createArrayAsync(GcArrayType type, List<GcValue> elements) {
+        return CompletableFuture.completedFuture(createArray(type, elements));
+    }
+
+    /**
+     * Asynchronously creates a new array instance filled with a default value
+     * using the runtime's async resource limiter path. Runtimes that do not
+     * support async allocation delegate to the synchronous
+     * {@link #createArray(GcArrayType, int)}.
+     *
+     * @param type   the array type
+     * @param length the number of elements
+     * @return a future completing with the new array instance
+     */
+    default CompletableFuture<GcArrayInstance> createArrayAsync(GcArrayType type, int length) {
+        return CompletableFuture.completedFuture(createArray(type, length));
+    }
 
     // --- Type casting ---
 

@@ -9,6 +9,22 @@ public interface Function {
     Object invoke(Object... args);
 
     /**
+     * Returns the number of parameters this function accepts.
+     * Default implementation delegates to {@code parameterTypes().length}.
+     */
+    default int parameterCount() {
+        return parameterTypes().length;
+    }
+
+    /**
+     * Returns the number of results this function returns.
+     * Default implementation delegates to {@code resultTypes().length}.
+     */
+    default int resultCount() {
+        return resultTypes().length;
+    }
+
+    /**
      * Returns a typed wrapper for this function that avoids boxing overhead.
      * The type must be one of the functional interfaces defined in
      * {@link TypedFunction}.
