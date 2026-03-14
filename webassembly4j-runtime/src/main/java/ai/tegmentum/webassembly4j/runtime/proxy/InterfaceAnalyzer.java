@@ -21,6 +21,8 @@ final class InterfaceAnalyzer {
         private final boolean[] paramNeedsMarshalling;
         private final boolean returnNeedsMarshalling;
 
+        private final int loweredArgCount;
+
         MethodBinding(Method method, String exportName) {
             this.method = method;
             this.exportName = exportName;
@@ -28,16 +30,23 @@ final class InterfaceAnalyzer {
             Class<?>[] paramTypes = method.getParameterTypes();
             this.paramNeedsMarshalling = new boolean[paramTypes.length];
             boolean anyParamNeedsMarshalling = false;
+            int argCount = 0;
             for (int i = 0; i < paramTypes.length; i++) {
                 paramNeedsMarshalling[i] = TypeConverter.isComplexType(paramTypes[i]);
                 if (paramNeedsMarshalling[i]) {
                     anyParamNeedsMarshalling = true;
+                    argCount += 2; // complex types expand to (ptr, len)
+                } else {
+                    argCount += 1;
                 }
             }
 
             Class<?> returnType = method.getReturnType();
             this.returnNeedsMarshalling = TypeConverter.isComplexType(returnType);
             this.requiresMarshalling = anyParamNeedsMarshalling || returnNeedsMarshalling;
+
+            // retptr takes one slot when return needs marshalling
+            this.loweredArgCount = argCount + (this.returnNeedsMarshalling ? 1 : 0);
         }
 
         Method method() {
@@ -58,6 +67,10 @@ final class InterfaceAnalyzer {
 
         boolean returnNeedsMarshalling() {
             return returnNeedsMarshalling;
+        }
+
+        int loweredArgCount() {
+            return loweredArgCount;
         }
     }
 

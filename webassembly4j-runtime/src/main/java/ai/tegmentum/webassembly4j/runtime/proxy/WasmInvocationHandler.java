@@ -8,8 +8,6 @@ import ai.tegmentum.webassembly4j.runtime.marshal.StringCodec;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 final class WasmInvocationHandler implements InvocationHandler {
@@ -75,13 +73,14 @@ final class WasmInvocationHandler implements InvocationHandler {
         Class<?> returnType = binding.method().getReturnType();
         boolean[] paramMarshalling = binding.paramNeedsMarshalling();
 
-        List<Object> loweredArgs = new ArrayList<>();
+        Object[] loweredArgs = new Object[binding.loweredArgCount()];
+        int argIdx = 0;
 
         // For complex return types, allocate a return pointer as the first argument
         int retptr = -1;
         if (binding.returnNeedsMarshalling()) {
             retptr = ctx.allocator().allocate(8, 4); // (ptr, len) pair
-            loweredArgs.add(retptr);
+            loweredArgs[argIdx++] = retptr;
         }
 
         // Lower each parameter using pre-computed flags
@@ -90,21 +89,21 @@ final class WasmInvocationHandler implements InvocationHandler {
                 if (paramTypes[i] == String.class) {
                     int[] encoded = StringCodec.encode(
                             (String) args[i], ctx.memory(), ctx.allocator());
-                    loweredArgs.add(encoded[0]); // ptr
-                    loweredArgs.add(encoded[1]); // len
+                    loweredArgs[argIdx++] = encoded[0]; // ptr
+                    loweredArgs[argIdx++] = encoded[1]; // len
                 } else if (paramTypes[i] == byte[].class) {
                     byte[] data = (byte[]) args[i];
                     int ptr = ctx.allocator().allocate(data.length, 1);
                     ctx.memory().write(ptr, data);
-                    loweredArgs.add(ptr);
-                    loweredArgs.add(data.length);
+                    loweredArgs[argIdx++] = ptr;
+                    loweredArgs[argIdx++] = data.length;
                 }
             } else {
-                loweredArgs.add(args[i]);
+                loweredArgs[argIdx++] = args[i];
             }
         }
 
-        Object result = fn.invoke(loweredArgs.toArray());
+        Object result = fn.invoke(loweredArgs);
 
         // Lift the return value
         if (binding.returnNeedsMarshalling()) {

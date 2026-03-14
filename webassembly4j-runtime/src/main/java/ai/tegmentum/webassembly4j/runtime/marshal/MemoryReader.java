@@ -10,10 +10,15 @@ import java.nio.ByteOrder;
  *
  * <p>Handles endianness conversion (WASM uses little-endian) and complex type
  * unmarshalling.
+ *
+ * <p>Uses a reusable scratch buffer to avoid per-call byte array and ByteBuffer
+ * allocations in the hot path.
  */
 public final class MemoryReader {
 
     private final Memory memory;
+    private final ByteBuffer scratch;
+    private final byte[] scratchArray;
 
     /**
      * Creates a new MemoryReader.
@@ -22,6 +27,8 @@ public final class MemoryReader {
      */
     public MemoryReader(Memory memory) {
         this.memory = memory;
+        this.scratchArray = new byte[8];
+        this.scratch = ByteBuffer.wrap(scratchArray).order(ByteOrder.LITTLE_ENDIAN);
     }
 
     /**
@@ -31,8 +38,8 @@ public final class MemoryReader {
      * @return the boolean value
      */
     public boolean readBool(int offset) {
-        byte[] bytes = memory.read(offset, 1);
-        return bytes[0] != 0;
+        memory.read(offset, 1, scratchArray, 0);
+        return scratchArray[0] != 0;
     }
 
     /**
@@ -42,8 +49,8 @@ public final class MemoryReader {
      * @return the integer value
      */
     public int readI32(int offset) {
-        byte[] bytes = memory.read(offset, 4);
-        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
+        memory.read(offset, 4, scratchArray, 0);
+        return scratch.getInt(0);
     }
 
     /**
@@ -53,8 +60,8 @@ public final class MemoryReader {
      * @return the long value
      */
     public long readI64(int offset) {
-        byte[] bytes = memory.read(offset, 8);
-        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getLong();
+        memory.read(offset, 8, scratchArray, 0);
+        return scratch.getLong(0);
     }
 
     /**
@@ -64,8 +71,8 @@ public final class MemoryReader {
      * @return the float value
      */
     public float readF32(int offset) {
-        byte[] bytes = memory.read(offset, 4);
-        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getFloat();
+        memory.read(offset, 4, scratchArray, 0);
+        return scratch.getFloat(0);
     }
 
     /**
@@ -75,8 +82,8 @@ public final class MemoryReader {
      * @return the double value
      */
     public double readF64(int offset) {
-        byte[] bytes = memory.read(offset, 8);
-        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getDouble();
+        memory.read(offset, 8, scratchArray, 0);
+        return scratch.getDouble(0);
     }
 
     /**

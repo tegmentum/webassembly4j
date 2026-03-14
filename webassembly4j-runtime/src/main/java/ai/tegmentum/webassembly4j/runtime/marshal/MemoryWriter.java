@@ -10,11 +10,19 @@ import java.nio.ByteOrder;
  *
  * <p>Handles endianness conversion (WASM uses little-endian) and complex type
  * marshalling through the provided {@link MemoryAllocator}.
+ *
+ * <p>Uses a reusable scratch buffer to avoid per-call byte array and ByteBuffer
+ * allocations in the hot path.
  */
 public final class MemoryWriter {
 
+    private static final byte[] TRUE_BYTE = {1};
+    private static final byte[] FALSE_BYTE = {0};
+
     private final Memory memory;
     private final MemoryAllocator allocator;
+    private final ByteBuffer scratch;
+    private final byte[] scratchArray;
 
     /**
      * Creates a new MemoryWriter.
@@ -25,6 +33,8 @@ public final class MemoryWriter {
     public MemoryWriter(Memory memory, MemoryAllocator allocator) {
         this.memory = memory;
         this.allocator = allocator;
+        this.scratchArray = new byte[8];
+        this.scratch = ByteBuffer.wrap(scratchArray).order(ByteOrder.LITTLE_ENDIAN);
     }
 
     /**
@@ -34,7 +44,7 @@ public final class MemoryWriter {
      * @param value the boolean value
      */
     public void writeBool(int offset, boolean value) {
-        memory.write(offset, new byte[]{(byte) (value ? 1 : 0)});
+        memory.write(offset, value ? TRUE_BYTE : FALSE_BYTE);
     }
 
     /**
@@ -44,9 +54,8 @@ public final class MemoryWriter {
      * @param value the integer value
      */
     public void writeI32(int offset, int value) {
-        byte[] bytes = new byte[4];
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(value);
-        memory.write(offset, bytes);
+        scratch.putInt(0, value);
+        memory.write(offset, scratchArray, 0, 4);
     }
 
     /**
@@ -56,9 +65,8 @@ public final class MemoryWriter {
      * @param value the long value
      */
     public void writeI64(int offset, long value) {
-        byte[] bytes = new byte[8];
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putLong(value);
-        memory.write(offset, bytes);
+        scratch.putLong(0, value);
+        memory.write(offset, scratchArray, 0, 8);
     }
 
     /**
@@ -68,9 +76,8 @@ public final class MemoryWriter {
      * @param value the float value
      */
     public void writeF32(int offset, float value) {
-        byte[] bytes = new byte[4];
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putFloat(value);
-        memory.write(offset, bytes);
+        scratch.putFloat(0, value);
+        memory.write(offset, scratchArray, 0, 4);
     }
 
     /**
@@ -80,9 +87,8 @@ public final class MemoryWriter {
      * @param value the double value
      */
     public void writeF64(int offset, double value) {
-        byte[] bytes = new byte[8];
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putDouble(value);
-        memory.write(offset, bytes);
+        scratch.putDouble(0, value);
+        memory.write(offset, scratchArray, 0, 8);
     }
 
     /**

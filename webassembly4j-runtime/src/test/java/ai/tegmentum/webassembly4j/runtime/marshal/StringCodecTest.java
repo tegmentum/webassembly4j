@@ -105,10 +105,20 @@ class StringCodecTest {
         }
 
         @Override
+        public void write(long offset, byte[] bytes, int srcOffset, int length) {
+            System.arraycopy(bytes, srcOffset, data, (int) offset, length);
+        }
+
+        @Override
         public byte[] read(long offset, int length) {
             byte[] result = new byte[length];
             System.arraycopy(data, (int) offset, result, 0, length);
             return result;
+        }
+
+        @Override
+        public void read(long offset, int length, byte[] dest, int destOffset) {
+            System.arraycopy(data, (int) offset, dest, destOffset, length);
         }
 
         @Override
