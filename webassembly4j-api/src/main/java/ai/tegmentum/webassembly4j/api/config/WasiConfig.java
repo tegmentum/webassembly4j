@@ -14,4 +14,11 @@ public interface WasiConfig {
     boolean inheritStdout();
 
     boolean inheritStderr();
+
+    /**
+     * Returns the WASI HTTP configuration, or null if HTTP is not configured.
+     */
+    default WasiHttpConfig httpConfig() {
+        return null;
+    }
 }

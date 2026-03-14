@@ -24,6 +24,25 @@ public interface Component extends AutoCloseable {
     ComponentInstance instantiate(LinkingContext linkingContext);
 
     /**
+     * Creates a new instance of this component with the given configuration.
+     * Providers that do not support component configuration ignore the config
+     * and delegate to {@link #instantiate()}.
+     */
+    default ComponentInstance instantiate(ai.tegmentum.webassembly4j.api.config.ComponentConfig config) {
+        return instantiate();
+    }
+
+    /**
+     * Creates a new instance of this component with the given linking context
+     * and configuration. Providers that do not support component configuration
+     * ignore the config and delegate to {@link #instantiate(LinkingContext)}.
+     */
+    default ComponentInstance instantiate(LinkingContext linkingContext,
+                                         ai.tegmentum.webassembly4j.api.config.ComponentConfig config) {
+        return instantiate(linkingContext);
+    }
+
+    /**
      * Returns the names of all exported interfaces.
      * Providers that do not support introspection return an empty list.
      */

@@ -21,4 +21,18 @@ public interface EngineCapabilities {
     boolean supportsMultiMemory();
 
     boolean supportsNativeInterop();
+
+    /**
+     * Returns whether this engine supports WASI HTTP.
+     */
+    default boolean supportsWasiHttp() {
+        return false;
+    }
+
+    /**
+     * Returns whether this engine supports async component model execution.
+     */
+    default boolean supportsAsyncComponents() {
+        return false;
+    }
 }

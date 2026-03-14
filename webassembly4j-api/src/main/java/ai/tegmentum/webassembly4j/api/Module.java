@@ -30,6 +30,17 @@ public interface Module extends AutoCloseable {
         return Collections.emptyList();
     }
 
+    /**
+     * Returns descriptors for all functions defined in this module,
+     * including imported, exported, and internal functions.
+     * Providers that do not support function introspection return an empty list.
+     *
+     * @return an unmodifiable list of function descriptors
+     */
+    default List<FunctionDescriptor> functions() {
+        return Collections.emptyList();
+    }
+
     default <T> Optional<T> extension(Class<T> extensionType) {
         return Optional.empty();
     }

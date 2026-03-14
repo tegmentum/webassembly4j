@@ -202,4 +202,17 @@ public interface GcExtension {
      * Returns current GC statistics.
      */
     GcStats getStats();
+
+    /**
+     * Releases a GC object, allowing the runtime to reclaim its resources
+     * immediately rather than waiting for the next garbage collection cycle.
+     *
+     * @param object the GC object to release
+     * @return true if the object was successfully released, false if the
+     *         runtime does not support explicit release or the object was
+     *         already released
+     */
+    default boolean release(GcObject object) {
+        return false;
+    }
 }

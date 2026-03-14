@@ -1,5 +1,8 @@
 package ai.tegmentum.webassembly4j.api;
 
+import ai.tegmentum.webassembly4j.api.component.async.ConcurrentTask;
+import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
+
 import java.util.List;
 
 /**
@@ -85,5 +88,20 @@ public interface ComponentInstance extends Instance {
             bytes[i] = list.get(i).byteValue();
         }
         return bytes;
+    }
+
+    /**
+     * Executes a task within a concurrent scope, allowing multiple async
+     * component function invocations to run concurrently.
+     *
+     * @param task the concurrent task to execute
+     * @param <T> the result type
+     * @return the task result
+     * @throws UnsupportedFeatureException if the provider does not support
+     *         concurrent component execution
+     */
+    default <T> T runConcurrent(ConcurrentTask<T> task) {
+        throw new UnsupportedFeatureException(
+                "Concurrent component execution not supported");
     }
 }
