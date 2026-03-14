@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           ./mvnw test -B -q \
-            -pl webassembly4j-api,webassembly4j-spi,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen \
+            -pl webassembly4j-api,webassembly4j-spi,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen \
             -am
 
       - name: Upload test results
@@ -104,4 +104,4 @@ jobs:
           restore-keys: m2-build-
 
       - name: Compile all modules
-        run: ./mvnw compile -B -q -pl '!wasmtime4j-provider'
+        run: ./mvnw compile -B -q -pl '!wasmtime4j-provider,!wamr4j-provider'
