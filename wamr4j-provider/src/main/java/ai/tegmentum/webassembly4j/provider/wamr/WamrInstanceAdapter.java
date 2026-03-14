@@ -7,6 +7,8 @@ import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Table;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 final class WamrInstanceAdapter implements Instance {
@@ -54,6 +56,30 @@ final class WamrInstanceAdapter implements Instance {
             return Optional.of(new WamrGlobalAdapter(nativeInstance, name));
         } catch (ai.tegmentum.wamr4j.exception.WasmRuntimeException e) {
             return Optional.empty();
+        }
+    }
+
+    @Override
+    public Map<String, Object> getGlobals(final String... globalNames) {
+        if (globalNames == null) {
+            throw new IllegalArgumentException("Global names array cannot be null");
+        }
+        try {
+            return nativeInstance.getGlobals(globalNames);
+        } catch (ai.tegmentum.wamr4j.exception.WasmRuntimeException e) {
+            throw new ai.tegmentum.webassembly4j.api.exception.ExecutionException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void setGlobals(final Map<String, Object> globals) {
+        if (globals == null) {
+            throw new IllegalArgumentException("Globals map cannot be null");
+        }
+        try {
+            nativeInstance.setGlobals(globals);
+        } catch (ai.tegmentum.wamr4j.exception.WasmRuntimeException e) {
+            throw new ai.tegmentum.webassembly4j.api.exception.ExecutionException(e.getMessage(), e);
         }
     }
 

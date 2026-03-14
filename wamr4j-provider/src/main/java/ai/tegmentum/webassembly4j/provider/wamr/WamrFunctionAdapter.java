@@ -35,6 +35,18 @@ final class WamrFunctionAdapter implements Function {
         }
     }
 
+    @Override
+    public Object[] invokeMultiple(final Object[]... argSets) {
+        if (argSets == null) {
+            throw new IllegalArgumentException("Argument sets array cannot be null");
+        }
+        try {
+            return nativeFunction.invokeMultiple(argSets);
+        } catch (ai.tegmentum.wamr4j.exception.WasmRuntimeException e) {
+            throw new ExecutionException(e.getMessage(), e);
+        }
+    }
+
     private static ValueType[] convertTypes(ai.tegmentum.wamr4j.ValueType[] nativeTypes) {
         ValueType[] types = new ValueType[nativeTypes.length];
         for (int i = 0; i < nativeTypes.length; i++) {
