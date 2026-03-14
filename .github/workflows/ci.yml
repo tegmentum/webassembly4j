@@ -104,4 +104,4 @@ jobs:
           restore-keys: m2-build-
 
       - name: Compile all modules
-        run: ./mvnw compile -B -q -pl '!wasmtime4j-provider,!wamr4j-provider'
+        run: ./mvnw compile -B -q -pl '!wasmtime4j-provider,!wamr4j-provider,!webassembly4j-benchmarks'
