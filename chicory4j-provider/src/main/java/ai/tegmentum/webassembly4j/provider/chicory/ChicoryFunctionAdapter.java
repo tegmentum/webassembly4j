@@ -13,12 +13,15 @@ final class ChicoryFunctionAdapter implements Function {
 
     private static final long[] EMPTY_LONGS = new long[0];
 
+    private enum FastPath { V_V, V_I, I_I, II_I, I_V, J_J, GENERIC }
+
     private final ExportFunction nativeFunction;
     private final FunctionType functionType;
     private final int paramCount;
     private final List<com.dylibso.chicory.wasm.types.ValueType> cachedParamTypes;
     private final List<com.dylibso.chicory.wasm.types.ValueType> cachedReturnTypes;
     private final long[] argScratch;
+    private final FastPath fastPath;
 
     ChicoryFunctionAdapter(ExportFunction nativeFunction, FunctionType functionType) {
         this.nativeFunction = nativeFunction;
@@ -27,6 +30,32 @@ final class ChicoryFunctionAdapter implements Function {
         this.cachedReturnTypes = functionType.returns();
         this.paramCount = cachedParamTypes.size();
         this.argScratch = paramCount > 0 ? new long[paramCount] : EMPTY_LONGS;
+        this.fastPath = classifySignature();
+    }
+
+    private FastPath classifySignature() {
+        boolean voidReturn = cachedReturnTypes.isEmpty();
+        boolean i32Return = cachedReturnTypes.size() == 1
+                && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32;
+        boolean i64Return = cachedReturnTypes.size() == 1
+                && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I64;
+
+        if (voidReturn && paramCount == 0) return FastPath.V_V;
+        if (voidReturn && paramCount == 1
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
+            return FastPath.I_V;
+        if (i32Return && paramCount == 0) return FastPath.V_I;
+        if (i32Return && paramCount == 1
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
+            return FastPath.I_I;
+        if (i32Return && paramCount == 2
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32
+                && cachedParamTypes.get(1) == com.dylibso.chicory.wasm.types.ValueType.I32)
+            return FastPath.II_I;
+        if (i64Return && paramCount == 1
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I64)
+            return FastPath.J_J;
+        return FastPath.GENERIC;
     }
 
     @Override
@@ -41,28 +70,52 @@ final class ChicoryFunctionAdapter implements Function {
 
     @Override
     public Object invoke(Object... args) {
-        long[] longArgs = convertToLongs(args);
         try {
-            long[] results = nativeFunction.apply(longArgs);
-            if (results == null || results.length == 0) {
-                return null;
+            switch (fastPath) {
+                case V_V:
+                    nativeFunction.apply(EMPTY_LONGS);
+                    return null;
+                case V_I:
+                    return (int) nativeFunction.apply(EMPTY_LONGS)[0];
+                case I_V:
+                    argScratch[0] = ((Number) args[0]).intValue();
+                    nativeFunction.apply(argScratch);
+                    return null;
+                case I_I:
+                    argScratch[0] = ((Number) args[0]).intValue();
+                    return (int) nativeFunction.apply(argScratch)[0];
+                case II_I:
+                    argScratch[0] = ((Number) args[0]).intValue();
+                    argScratch[1] = ((Number) args[1]).intValue();
+                    return (int) nativeFunction.apply(argScratch)[0];
+                case J_J:
+                    argScratch[0] = ((Number) args[0]).longValue();
+                    return nativeFunction.apply(argScratch)[0];
+                default:
+                    return invokeGeneric(args);
             }
-            if (cachedReturnTypes.isEmpty()) {
-                return null;
-            }
-            if (results.length == 1) {
-                return extractValue(results[0], cachedReturnTypes.get(0));
-            }
-            Object[] extracted = new Object[results.length];
-            for (int i = 0; i < results.length; i++) {
-                extracted[i] = extractValue(results[i], cachedReturnTypes.get(i));
-            }
-            return extracted;
         } catch (com.dylibso.chicory.runtime.TrapException e) {
             throw new TrapException(e.getMessage(), e);
         } catch (Exception e) {
+            if (e instanceof ExecutionException) throw (ExecutionException) e;
             throw new ExecutionException(e.getMessage(), e);
         }
+    }
+
+    private Object invokeGeneric(Object[] args) {
+        long[] longArgs = convertToLongs(args);
+        long[] results = nativeFunction.apply(longArgs);
+        if (results == null || results.length == 0) {
+            return null;
+        }
+        if (results.length == 1) {
+            return extractValue(results[0], cachedReturnTypes.get(0));
+        }
+        Object[] extracted = new Object[results.length];
+        for (int i = 0; i < results.length; i++) {
+            extracted[i] = extractValue(results[i], cachedReturnTypes.get(i));
+        }
+        return extracted;
     }
 
     private long[] convertToLongs(Object[] args) {
