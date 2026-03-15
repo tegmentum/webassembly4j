@@ -7,11 +7,16 @@ import ai.tegmentum.webassembly4j.runtime.spi.WasmBindingProvider;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 
 public final class ProxyFactory {
+
+    private static volatile List<WasmBindingProvider> cachedBindingProviders;
 
     private ProxyFactory() {
     }
@@ -21,7 +26,7 @@ public final class ProxyFactory {
                                 ai.tegmentum.webassembly4j.api.Module module,
                                 Instance instance) {
         // Try generated binding providers first
-        for (WasmBindingProvider provider : ServiceLoader.load(WasmBindingProvider.class)) {
+        for (WasmBindingProvider provider : getBindingProviders()) {
             if (provider.supports(iface)) {
                 return provider.create(iface, instance, module, engine);
             }
@@ -46,5 +51,25 @@ public final class ProxyFactory {
                 iface.getClassLoader(),
                 new Class<?>[]{iface},
                 handler);
+    }
+
+    private static List<WasmBindingProvider> getBindingProviders() {
+        List<WasmBindingProvider> providers = cachedBindingProviders;
+        if (providers == null) {
+            providers = discoverBindingProviders();
+        }
+        return providers;
+    }
+
+    private static synchronized List<WasmBindingProvider> discoverBindingProviders() {
+        if (cachedBindingProviders != null) {
+            return cachedBindingProviders;
+        }
+        List<WasmBindingProvider> providers = new ArrayList<>();
+        for (WasmBindingProvider provider : ServiceLoader.load(WasmBindingProvider.class)) {
+            providers.add(provider);
+        }
+        cachedBindingProviders = Collections.unmodifiableList(providers);
+        return cachedBindingProviders;
     }
 }

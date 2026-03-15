@@ -4,10 +4,10 @@ import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.Function;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.runtime.marshal.MarshalContext;
-import ai.tegmentum.webassembly4j.runtime.marshal.StringCodec;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -126,10 +126,11 @@ final class WasmInvocationHandler implements InvocationHandler {
         for (int i = 0; i < paramTypes.length; i++) {
             if (paramMarshalling[i]) {
                 if (paramTypes[i] == String.class) {
-                    int[] encoded = StringCodec.encode(
-                            (String) args[i], ctx.memory(), ctx.allocator());
-                    loweredArgs[argIdx++] = encoded[0]; // ptr
-                    loweredArgs[argIdx++] = encoded[1]; // len
+                    byte[] utf8 = ((String) args[i]).getBytes(StandardCharsets.UTF_8);
+                    int ptr = ctx.allocator().allocate(utf8.length, 1);
+                    ctx.memory().write(ptr, utf8);
+                    loweredArgs[argIdx++] = ptr;
+                    loweredArgs[argIdx++] = utf8.length;
                 } else if (paramTypes[i] == byte[].class) {
                     byte[] data = (byte[]) args[i];
                     int ptr = ctx.allocator().allocate(data.length, 1);

@@ -16,11 +16,17 @@ final class ChicoryFunctionAdapter implements Function {
     private final ExportFunction nativeFunction;
     private final FunctionType functionType;
     private final int paramCount;
+    private final List<com.dylibso.chicory.wasm.types.ValueType> cachedParamTypes;
+    private final List<com.dylibso.chicory.wasm.types.ValueType> cachedReturnTypes;
+    private final long[] argScratch;
 
     ChicoryFunctionAdapter(ExportFunction nativeFunction, FunctionType functionType) {
         this.nativeFunction = nativeFunction;
         this.functionType = functionType;
-        this.paramCount = functionType.params().size();
+        this.cachedParamTypes = functionType.params();
+        this.cachedReturnTypes = functionType.returns();
+        this.paramCount = cachedParamTypes.size();
+        this.argScratch = paramCount > 0 ? new long[paramCount] : EMPTY_LONGS;
     }
 
     @Override
@@ -41,16 +47,15 @@ final class ChicoryFunctionAdapter implements Function {
             if (results == null || results.length == 0) {
                 return null;
             }
-            List<com.dylibso.chicory.wasm.types.ValueType> returnTypes = functionType.returns();
-            if (returnTypes.isEmpty()) {
+            if (cachedReturnTypes.isEmpty()) {
                 return null;
             }
             if (results.length == 1) {
-                return extractValue(results[0], returnTypes.get(0));
+                return extractValue(results[0], cachedReturnTypes.get(0));
             }
             Object[] extracted = new Object[results.length];
             for (int i = 0; i < results.length; i++) {
-                extracted[i] = extractValue(results[i], returnTypes.get(i));
+                extracted[i] = extractValue(results[i], cachedReturnTypes.get(i));
             }
             return extracted;
         } catch (com.dylibso.chicory.runtime.TrapException e) {
@@ -64,12 +69,10 @@ final class ChicoryFunctionAdapter implements Function {
         if (args == null || args.length == 0) {
             return EMPTY_LONGS;
         }
-        List<com.dylibso.chicory.wasm.types.ValueType> paramTypes = functionType.params();
-        long[] result = new long[paramCount];
         for (int i = 0; i < args.length; i++) {
-            result[i] = convertToLong(args[i], paramTypes.get(i));
+            argScratch[i] = convertToLong(args[i], cachedParamTypes.get(i));
         }
-        return result;
+        return argScratch;
     }
 
     private long convertToLong(Object value, com.dylibso.chicory.wasm.types.ValueType type) {
