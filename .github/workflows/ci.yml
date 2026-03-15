@@ -106,11 +106,8 @@ jobs:
       - name: Compile all modules
         run: ./mvnw compile -B -q -pl '!webassembly4j-benchmarks'
 
-      - name: Javadoc (API)
-        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-api
+      - name: Install dependencies for javadoc
+        run: ./mvnw install -B -q -DskipTests -Dmaven.javadoc.skip=true -pl webassembly4j-api,webassembly4j-spi,webassembly4j-runtime -am
 
-      - name: Javadoc (SPI)
-        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-spi
-
-      - name: Javadoc (Runtime)
-        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-runtime
+      - name: Javadoc
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-api,webassembly4j-spi,webassembly4j-runtime
