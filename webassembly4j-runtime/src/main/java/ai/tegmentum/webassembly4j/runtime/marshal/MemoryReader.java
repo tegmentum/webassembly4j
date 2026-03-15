@@ -96,8 +96,10 @@ public final class MemoryReader {
      * @return the decoded string
      */
     public String readString(int offset) {
-        int ptr = readI32(offset);
-        int len = readI32(offset + 4);
+        // Read both ptr and len in a single 8-byte read
+        memory.read(offset, 8, scratchArray, 0);
+        int ptr = scratch.getInt(0);
+        int len = scratch.getInt(4);
         return StringCodec.decode(memory, ptr, len);
     }
 
@@ -111,8 +113,10 @@ public final class MemoryReader {
      * @return the byte array
      */
     public byte[] readBytes(int offset) {
-        int ptr = readI32(offset);
-        int len = readI32(offset + 4);
+        // Read both ptr and len in a single 8-byte read
+        memory.read(offset, 8, scratchArray, 0);
+        int ptr = scratch.getInt(0);
+        int len = scratch.getInt(4);
         return memory.read(ptr, len);
     }
 }
