@@ -20,6 +20,8 @@ import java.util.Map;
  */
 final class GcInvocationHandler implements InvocationHandler {
 
+    private static final Object[] EMPTY_ARGS = new Object[0];
+
     private final Class<?> iface;
     private final Engine engine;
     private final ai.tegmentum.webassembly4j.api.Module module;
@@ -70,7 +72,7 @@ final class GcInvocationHandler implements InvocationHandler {
         }
 
         GcProxyFactory.MethodBinding binding = bindings.get(method);
-        Object[] actualArgs = args != null ? args : new Object[0];
+        Object[] actualArgs = args != null ? args : EMPTY_ARGS;
 
         if (binding != null && binding.anyGcMarshalling) {
             return invokeWithGcMarshalling(fn, binding, actualArgs);

@@ -3,12 +3,17 @@ package ai.tegmentum.webassembly4j.runtime.proxy;
 import ai.tegmentum.webassembly4j.runtime.annotation.WasmExport;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class InterfaceAnalyzer {
+
+    private static final ConcurrentHashMap<Class<?>, Map<Method, MethodBinding>> analysisCache =
+            new ConcurrentHashMap<>();
 
     private InterfaceAnalyzer() {
     }
@@ -123,12 +128,18 @@ final class InterfaceAnalyzer {
      * @return a map of Method to MethodBinding
      */
     static Map<Method, MethodBinding> analyzeExports(Class<?> iface) {
+        Map<Method, MethodBinding> cached = analysisCache.get(iface);
+        if (cached != null) {
+            return cached;
+        }
         Map<Method, String> exportNames = resolveExportNames(iface);
         Map<Method, MethodBinding> bindings = new LinkedHashMap<>();
         for (Map.Entry<Method, String> entry : exportNames.entrySet()) {
             bindings.put(entry.getKey(), new MethodBinding(entry.getKey(), entry.getValue()));
         }
-        return bindings;
+        Map<Method, MethodBinding> unmodifiable = Collections.unmodifiableMap(bindings);
+        analysisCache.putIfAbsent(iface, unmodifiable);
+        return unmodifiable;
     }
 
     private static void validateMethodSignature(Method method) {
