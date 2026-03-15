@@ -33,15 +33,28 @@
             <artifactId>wamr4j</artifactId>
         </dependency>
         <dependency>
-            <groupId>ai.tegmentum.wamr4j</groupId>
-            <artifactId>wamr4j-jni</artifactId>
-            <version>${wamr4j.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>native-tests</id>
+            <activation>
+                <property>
+                    <name>!skipNativeTests</name>
+                </property>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>ai.tegmentum.wamr4j</groupId>
+                    <artifactId>wamr4j-jni</artifactId>
+                    <version>${wamr4j.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>

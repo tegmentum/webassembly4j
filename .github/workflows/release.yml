@@ -130,7 +130,7 @@ jobs:
         run: |
           DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw install -B -q \
-            -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true \
+            -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true -DskipNativeTests \
             $DEPLOY_MODULES -am
 
       - name: Deploy to Maven Central
@@ -141,7 +141,7 @@ jobs:
         run: |
           DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw deploy -B -P release \
-            -DskipTests -Dmaven.test.skip=true \
+            -DskipTests -Dmaven.test.skip=true -DskipNativeTests \
             $DEPLOY_MODULES
 
       - name: Deploy to GitHub Packages
@@ -162,7 +162,7 @@ jobs:
           </settings>
           SETTINGS
           ./mvnw deploy -B \
-            -DskipTests -Dmaven.test.skip=true \
+            -DskipTests -Dmaven.test.skip=true -DskipNativeTests \
             -DaltDeploymentRepository=github::https://maven.pkg.github.com/${{ github.repository }} \
             -Dgpg.skip=true \
             -s ~/.m2/settings-github.xml \
@@ -172,7 +172,7 @@ jobs:
         run: |
           DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw package -B -P release \
-            -DskipTests -Dmaven.test.skip=true \
+            -DskipTests -Dmaven.test.skip=true -DskipNativeTests \
             $DEPLOY_MODULES
 
       - name: Create checksums
