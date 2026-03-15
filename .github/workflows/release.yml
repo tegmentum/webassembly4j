@@ -126,6 +126,12 @@ jobs:
         run: |
           ./mvnw versions:set -B -q -DnewVersion=${{ steps.version.outputs.version }} -DgenerateBackupPoms=false
 
+      - name: Install all modules locally
+        run: |
+          ./mvnw install -B -q \
+            -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true \
+            -pl '!webassembly4j-benchmarks'
+
       - name: Deploy to Maven Central
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -133,7 +139,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
-          ./mvnw deploy -B \
+          ./mvnw deploy -B -P release \
             -DskipTests -Dmaven.test.skip=true \
             $DEPLOY_MODULES
 
@@ -164,7 +170,7 @@ jobs:
       - name: Package artifacts
         run: |
           DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
-          ./mvnw package -B \
+          ./mvnw package -B -P release \
             -DskipTests -Dmaven.test.skip=true \
             $DEPLOY_MODULES
 
