@@ -126,11 +126,12 @@ jobs:
         run: |
           ./mvnw versions:set -B -q -DnewVersion=${{ steps.version.outputs.version }} -DgenerateBackupPoms=false
 
-      - name: Install all modules locally
+      - name: Install modules locally
         run: |
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw install -B -q \
             -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true \
-            -pl '!webassembly4j-benchmarks'
+            $DEPLOY_MODULES -am
 
       - name: Deploy to Maven Central
         env:
