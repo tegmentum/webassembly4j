@@ -13,7 +13,7 @@ final class ChicoryFunctionAdapter implements Function {
 
     private static final long[] EMPTY_LONGS = new long[0];
 
-    private enum FastPath { V_V, V_I, I_I, II_I, I_V, J_J, GENERIC }
+    private enum FastPath { V_V, V_I, I_I, II_I, I_V, J_J, II_V, I_J, D_D, V_J, GENERIC }
 
     private final ExportFunction nativeFunction;
     private final FunctionType functionType;
@@ -39,11 +39,17 @@ final class ChicoryFunctionAdapter implements Function {
                 && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32;
         boolean i64Return = cachedReturnTypes.size() == 1
                 && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I64;
+        boolean f64Return = cachedReturnTypes.size() == 1
+                && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.F64;
 
         if (voidReturn && paramCount == 0) return FastPath.V_V;
         if (voidReturn && paramCount == 1
                 && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
             return FastPath.I_V;
+        if (voidReturn && paramCount == 2
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32
+                && cachedParamTypes.get(1) == com.dylibso.chicory.wasm.types.ValueType.I32)
+            return FastPath.II_V;
         if (i32Return && paramCount == 0) return FastPath.V_I;
         if (i32Return && paramCount == 1
                 && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
@@ -52,9 +58,16 @@ final class ChicoryFunctionAdapter implements Function {
                 && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32
                 && cachedParamTypes.get(1) == com.dylibso.chicory.wasm.types.ValueType.I32)
             return FastPath.II_I;
+        if (i64Return && paramCount == 0) return FastPath.V_J;
+        if (i64Return && paramCount == 1
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
+            return FastPath.I_J;
         if (i64Return && paramCount == 1
                 && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I64)
             return FastPath.J_J;
+        if (f64Return && paramCount == 1
+                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.F64)
+            return FastPath.D_D;
         return FastPath.GENERIC;
     }
 
@@ -88,9 +101,24 @@ final class ChicoryFunctionAdapter implements Function {
                     argScratch[0] = ((Number) args[0]).intValue();
                     argScratch[1] = ((Number) args[1]).intValue();
                     return (int) nativeFunction.apply(argScratch)[0];
+                case II_V:
+                    argScratch[0] = ((Number) args[0]).intValue();
+                    argScratch[1] = ((Number) args[1]).intValue();
+                    nativeFunction.apply(argScratch);
+                    return null;
+                case V_J:
+                    return nativeFunction.apply(EMPTY_LONGS)[0];
+                case I_J:
+                    argScratch[0] = ((Number) args[0]).intValue();
+                    return nativeFunction.apply(argScratch)[0];
                 case J_J:
                     argScratch[0] = ((Number) args[0]).longValue();
                     return nativeFunction.apply(argScratch)[0];
+                case D_D:
+                    argScratch[0] = com.dylibso.chicory.wasm.types.Value.doubleToLong(
+                            ((Number) args[0]).doubleValue());
+                    return com.dylibso.chicory.wasm.types.Value.longToDouble(
+                            nativeFunction.apply(argScratch)[0]);
                 default:
                     return invokeGeneric(args);
             }
