@@ -14,11 +14,14 @@ import ai.tegmentum.webassembly4j.spi.ProviderSelector;
 import ai.tegmentum.webassembly4j.spi.ValidationResult;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.ServiceLoader;
 
 public final class ServiceLoaderProviderRegistry
         implements ProviderBootstrap, WebAssemblyProviderBootstrap {
+
+    private static volatile List<EngineProvider> cachedProviders;
 
     private final ProviderSelector selector;
 
@@ -51,7 +54,7 @@ public final class ServiceLoaderProviderRegistry
     @Override
     public Engine createEngine(WebAssemblyConfig config, String requestedEngineId,
                                String requestedProviderId) {
-        List<EngineProvider> providers = discoverProviders();
+        List<EngineProvider> providers = getProviders();
 
         ProviderContext context = new DefaultProviderContext(
                 RuntimeVersion.currentJavaVersion(),
@@ -75,12 +78,24 @@ public final class ServiceLoaderProviderRegistry
         return provider.create(config);
     }
 
-    private List<EngineProvider> discoverProviders() {
+    private static List<EngineProvider> getProviders() {
+        List<EngineProvider> providers = cachedProviders;
+        if (providers == null) {
+            providers = discoverProviders();
+        }
+        return providers;
+    }
+
+    private static synchronized List<EngineProvider> discoverProviders() {
+        if (cachedProviders != null) {
+            return cachedProviders;
+        }
         List<EngineProvider> providers = new ArrayList<>();
         ServiceLoader<EngineProvider> loader = ServiceLoader.load(EngineProvider.class);
         for (EngineProvider provider : loader) {
             providers.add(provider);
         }
-        return providers;
+        cachedProviders = Collections.unmodifiableList(providers);
+        return cachedProviders;
     }
 }

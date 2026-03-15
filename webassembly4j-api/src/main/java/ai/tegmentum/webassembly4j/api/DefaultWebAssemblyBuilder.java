@@ -9,6 +9,8 @@ import java.util.ServiceLoader;
 
 final class DefaultWebAssemblyBuilder implements WebAssemblyBuilder {
 
+    private static volatile WebAssemblyProviderBootstrap cachedBootstrap;
+
     private String engineId;
     private String providerId;
     private WebAssemblyConfig config;
@@ -40,11 +42,24 @@ final class DefaultWebAssemblyBuilder implements WebAssemblyBuilder {
 
     @Override
     public Engine build() {
+        WebAssemblyProviderBootstrap bootstrap = cachedBootstrap;
+        if (bootstrap == null) {
+            bootstrap = findBootstrap();
+        }
+        return bootstrap.createEngine(config, engineConfig, engineId, providerId);
+    }
+
+    private static synchronized WebAssemblyProviderBootstrap findBootstrap() {
+        if (cachedBootstrap != null) {
+            return cachedBootstrap;
+        }
+
         ServiceLoader<WebAssemblyProviderBootstrap> loader =
                 ServiceLoader.load(WebAssemblyProviderBootstrap.class);
 
         for (WebAssemblyProviderBootstrap bootstrap : loader) {
-            return bootstrap.createEngine(config, engineConfig, engineId, providerId);
+            cachedBootstrap = bootstrap;
+            return bootstrap;
         }
 
         throw new ProviderUnavailableException(
