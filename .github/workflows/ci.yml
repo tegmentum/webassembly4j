@@ -84,9 +84,9 @@ jobs:
           path: '**/target/surefire-reports/'
           retention-days: 7
 
-  # Verify the full build compiles (including benchmarks)
-  build-all:
-    name: Full Build
+  # Static analysis and compilation quality gate
+  quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,8 +100,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: m2-build-${{ hashFiles('**/pom.xml') }}
-          restore-keys: m2-build-
+          key: m2-quality-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-quality-
 
       - name: Compile all modules
         run: ./mvnw compile -B -q -pl '!webassembly4j-benchmarks'
+
+      - name: Javadoc (API)
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-api
+
+      - name: Javadoc (SPI)
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-spi
+
+      - name: Javadoc (Runtime)
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-runtime

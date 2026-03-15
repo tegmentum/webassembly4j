@@ -61,10 +61,41 @@ jobs:
             -pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen \
             -am
 
+  # Static analysis quality gate
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: 'temurin'
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-quality-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-quality-
+
+      - name: Compile all modules
+        run: ./mvnw compile -B -q -pl '!webassembly4j-benchmarks'
+
+      - name: Javadoc (API)
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-api
+
+      - name: Javadoc (SPI)
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-spi
+
+      - name: Javadoc (Runtime)
+        run: ./mvnw javadoc:javadoc -B -q -pl webassembly4j-runtime
+
   # Publish to Maven Central and GitHub Packages
   publish:
     name: Publish
-    needs: test
+    needs: [test, quality]
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -94,20 +125,26 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Set release version
+        run: |
+          ./mvnw versions:set -B -q -DnewVersion=${{ steps.version.outputs.version }} -DgenerateBackupPoms=false
+
       - name: Deploy to Maven Central
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw deploy -B \
-            -DskipTests \
-            -Drevision=${{ steps.version.outputs.version }}
+            -DskipTests -Dmaven.test.skip=true \
+            $DEPLOY_MODULES
 
       - name: Deploy to GitHub Packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           mkdir -p ~/.m2
           cat > ~/.m2/settings-github.xml <<'SETTINGS'
           <settings>
@@ -121,21 +158,22 @@ jobs:
           </settings>
           SETTINGS
           ./mvnw deploy -B \
-            -DskipTests \
-            -Drevision=${{ steps.version.outputs.version }} \
+            -DskipTests -Dmaven.test.skip=true \
             -DaltDeploymentRepository=github::https://maven.pkg.github.com/${{ github.repository }} \
             -Dgpg.skip=true \
-            -s ~/.m2/settings-github.xml
+            -s ~/.m2/settings-github.xml \
+            $DEPLOY_MODULES
 
       - name: Package artifacts
         run: |
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw package -B \
-            -DskipTests \
-            -Drevision=${{ steps.version.outputs.version }}
+            -DskipTests -Dmaven.test.skip=true \
+            $DEPLOY_MODULES
 
       - name: Create checksums
         run: |
-          for dir in */target; do
+          for dir in webassembly4j-api/target webassembly4j-spi/target webassembly4j-runtime/target webassembly4j-testing/target webassembly4j-pool/target webassembly4j-spring/target webassembly4j-bindgen/target wasmtime4j-provider/target wamr4j-provider/target chicory4j-provider/target graalwasm4j-provider/target; do
             if [ -d "$dir" ]; then
               for jar in "$dir"/*.jar; do
                 [ -f "$jar" ] && sha256sum "$jar" > "$jar.sha256"
@@ -162,3 +200,11 @@ jobs:
             webassembly4j-spring/target/*.jar.sha256
             webassembly4j-bindgen/target/*.jar
             webassembly4j-bindgen/target/*.jar.sha256
+            wasmtime4j-provider/target/*.jar
+            wasmtime4j-provider/target/*.jar.sha256
+            wamr4j-provider/target/*.jar
+            wamr4j-provider/target/*.jar.sha256
+            chicory4j-provider/target/*.jar
+            chicory4j-provider/target/*.jar.sha256
+            graalwasm4j-provider/target/*.jar
+            graalwasm4j-provider/target/*.jar.sha256
