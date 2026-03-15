@@ -11,12 +11,16 @@ import java.util.List;
 
 final class ChicoryFunctionAdapter implements Function {
 
+    private static final long[] EMPTY_LONGS = new long[0];
+
     private final ExportFunction nativeFunction;
     private final FunctionType functionType;
+    private final int paramCount;
 
     ChicoryFunctionAdapter(ExportFunction nativeFunction, FunctionType functionType) {
         this.nativeFunction = nativeFunction;
         this.functionType = functionType;
+        this.paramCount = functionType.params().size();
     }
 
     @Override
@@ -58,10 +62,10 @@ final class ChicoryFunctionAdapter implements Function {
 
     private long[] convertToLongs(Object[] args) {
         if (args == null || args.length == 0) {
-            return new long[0];
+            return EMPTY_LONGS;
         }
         List<com.dylibso.chicory.wasm.types.ValueType> paramTypes = functionType.params();
-        long[] result = new long[args.length];
+        long[] result = new long[paramCount];
         for (int i = 0; i < args.length; i++) {
             result[i] = convertToLong(args[i], paramTypes.get(i));
         }

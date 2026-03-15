@@ -8,16 +8,38 @@ import ai.tegmentum.webassembly4j.runtime.marshal.StringCodec;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 
 final class WasmInvocationHandler implements InvocationHandler {
+
+    private static final Object[] EMPTY_ARGS = new Object[0];
+
+    /**
+     * Pre-computed dispatch entry for a single method. Avoids per-call string
+     * comparisons and HashMap lookups by caching everything at construction time.
+     */
+    private static final class DispatchEntry {
+        final Function function;
+        final InterfaceAnalyzer.MethodBinding binding;
+        final Class<?> returnType;
+
+        DispatchEntry(Function function, InterfaceAnalyzer.MethodBinding binding,
+                      Class<?> returnType) {
+            this.function = function;
+            this.binding = binding;
+            this.returnType = returnType;
+        }
+    }
 
     private final Class<?> iface;
     private final Engine engine;
     private final ai.tegmentum.webassembly4j.api.Module module;
     private final Instance instance;
-    private final Map<Method, Function> exports;
-    private final Map<Method, InterfaceAnalyzer.MethodBinding> bindings;
+
+    // Single dispatch table: merges exports + bindings + returnType into one lookup
+    private final HashMap<Method, DispatchEntry> dispatch;
+
     private volatile boolean closed;
     private MarshalContext marshalContext;
 
@@ -28,43 +50,60 @@ final class WasmInvocationHandler implements InvocationHandler {
         this.engine = engine;
         this.module = module;
         this.instance = instance;
-        this.exports = exports;
-        this.bindings = bindings;
+
+        // Pre-compute dispatch table merging exports + bindings + returnType
+        this.dispatch = new HashMap<>(exports.size());
+        for (Map.Entry<Method, Function> entry : exports.entrySet()) {
+            Method m = entry.getKey();
+            InterfaceAnalyzer.MethodBinding binding = bindings.get(m);
+            dispatch.put(m, new DispatchEntry(entry.getValue(), binding, m.getReturnType()));
+        }
     }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        if (isCloseMethod(method)) {
-            close();
-            return null;
-        }
-        if (isEqualsMethod(method)) {
-            return proxy == args[0];
-        }
-        if (isHashCodeMethod(method)) {
-            return System.identityHashCode(proxy);
-        }
-        if (isToStringMethod(method)) {
-            return "WasmProxy[" + iface.getSimpleName() + "]";
+        // Check for special Object/AutoCloseable methods using lightweight string checks.
+        // These are not on the hot path — WASM method names never collide.
+        String name = method.getName();
+        switch (name.length()) {
+            case 5: // "close"
+                if ("close".equals(name) && method.getParameterCount() == 0) {
+                    close();
+                    return null;
+                }
+                break;
+            case 6: // "equals"
+                if ("equals".equals(name) && method.getParameterCount() == 1) {
+                    return proxy == args[0];
+                }
+                break;
+            case 8: // "hashCode" or "toString"
+                if ("hashCode".equals(name) && method.getParameterCount() == 0) {
+                    return System.identityHashCode(proxy);
+                }
+                if ("toString".equals(name) && method.getParameterCount() == 0) {
+                    return "WasmProxy[" + iface.getSimpleName() + "]";
+                }
+                break;
         }
 
         if (closed) {
             throw new IllegalStateException("WASM binding has been closed");
         }
 
-        Function fn = exports.get(method);
-        if (fn == null) {
+        // Single lookup replaces exports.get() + bindings.get() + method.getReturnType()
+        DispatchEntry entry = dispatch.get(method);
+        if (entry == null) {
             throw new UnsupportedOperationException(
                     "No WASM export bound for method: " + method.getName());
         }
 
-        InterfaceAnalyzer.MethodBinding binding = bindings.get(method);
-        if (binding != null && binding.requiresMarshalling()) {
-            return invokeMarshal(fn, binding, args != null ? args : new Object[0]);
+        if (entry.binding != null && entry.binding.requiresMarshalling()) {
+            return invokeMarshal(entry.function, entry.binding, args != null ? args : EMPTY_ARGS);
         }
 
-        Object result = fn.invoke(args != null ? args : new Object[0]);
-        return TypeConverter.fromWasm(result, method.getReturnType());
+        Object result = entry.function.invoke(args != null ? args : EMPTY_ARGS);
+        return TypeConverter.fromWasm(result, entry.returnType);
     }
 
     private Object invokeMarshal(Function fn, InterfaceAnalyzer.MethodBinding binding, Object[] args) {
@@ -133,23 +172,5 @@ final class WasmInvocationHandler implements InvocationHandler {
                 engine.close();
             }
         }
-    }
-
-    private static boolean isCloseMethod(Method method) {
-        return "close".equals(method.getName()) && method.getParameterCount() == 0;
-    }
-
-    private static boolean isEqualsMethod(Method method) {
-        return "equals".equals(method.getName())
-                && method.getParameterCount() == 1
-                && method.getParameterTypes()[0] == Object.class;
-    }
-
-    private static boolean isHashCodeMethod(Method method) {
-        return "hashCode".equals(method.getName()) && method.getParameterCount() == 0;
-    }
-
-    private static boolean isToStringMethod(Method method) {
-        return "toString".equals(method.getName()) && method.getParameterCount() == 0;
     }
 }

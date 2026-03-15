@@ -3,8 +3,10 @@ package ai.tegmentum.webassembly4j.runtime.proxy;
 import ai.tegmentum.webassembly4j.runtime.annotation.WasmExport;
 
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 final class InterfaceAnalyzer {
 
@@ -151,7 +153,17 @@ final class InterfaceAnalyzer {
         }
     }
 
+    private static final Set<String> OBJECT_METHOD_NAMES = new HashSet<>();
+    static {
+        for (Method m : Object.class.getMethods()) {
+            OBJECT_METHOD_NAMES.add(m.getName());
+        }
+    }
+
     private static boolean isObjectMethod(Method method) {
+        if (!OBJECT_METHOD_NAMES.contains(method.getName())) {
+            return false;
+        }
         try {
             Object.class.getMethod(method.getName(), method.getParameterTypes());
             return true;
