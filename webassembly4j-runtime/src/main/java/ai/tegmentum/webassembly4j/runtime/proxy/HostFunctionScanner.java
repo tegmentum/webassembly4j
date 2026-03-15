@@ -11,6 +11,8 @@ import java.util.List;
 
 public final class HostFunctionScanner {
 
+    private static final Object[] EMPTY_RESULT = new Object[0];
+
     private HostFunctionScanner() {
     }
 
@@ -49,24 +51,9 @@ public final class HostFunctionScanner {
                 final Object target = hostObject;
                 final Method targetMethod = method;
                 targetMethod.setAccessible(true);
-                HostFunction hostFunction = args -> {
-                    try {
-                        Object[] convertedArgs = new Object[paramTypes.length];
-                        for (int i = 0; i < paramTypes.length; i++) {
-                            convertedArgs[i] = TypeConverter.fromWasm(args[i], paramTypes[i]);
-                        }
-                        Object result = targetMethod.invoke(target, convertedArgs);
-                        if (TypeConverter.isVoid(targetMethod.getReturnType())) {
-                            return new Object[0];
-                        }
-                        return new Object[]{result};
-                    } catch (Exception e) {
-                        if (e.getCause() instanceof RuntimeException) {
-                            throw (RuntimeException) e.getCause();
-                        }
-                        throw new RuntimeException("Host function invocation failed", e);
-                    }
-                };
+
+                HostFunction hostFunction = createHostFunction(
+                        target, targetMethod, paramTypes);
 
                 definitions.add(new HostFunctionDefinition(
                         moduleName, functionName, wasmParamTypes, wasmResultTypes, hostFunction));
@@ -74,5 +61,72 @@ public final class HostFunctionScanner {
         }
 
         return definitions;
+    }
+
+    private static HostFunction createHostFunction(Object target, Method method,
+                                                   Class<?>[] paramTypes) {
+        final int paramCount = paramTypes.length;
+        final boolean voidReturn = TypeConverter.isVoid(method.getReturnType());
+
+        // Fast paths for common signatures avoid Object[] allocation
+        if (paramCount == 0) {
+            return args -> {
+                try {
+                    Object result = method.invoke(target);
+                    return voidReturn ? EMPTY_RESULT : new Object[]{result};
+                } catch (Exception e) {
+                    throw unwrap(e);
+                }
+            };
+        }
+
+        if (paramCount == 1) {
+            final Class<?> p0 = paramTypes[0];
+            return args -> {
+                try {
+                    Object result = method.invoke(target,
+                            TypeConverter.fromWasm(args[0], p0));
+                    return voidReturn ? EMPTY_RESULT : new Object[]{result};
+                } catch (Exception e) {
+                    throw unwrap(e);
+                }
+            };
+        }
+
+        if (paramCount == 2) {
+            final Class<?> p0 = paramTypes[0];
+            final Class<?> p1 = paramTypes[1];
+            return args -> {
+                try {
+                    Object result = method.invoke(target,
+                            TypeConverter.fromWasm(args[0], p0),
+                            TypeConverter.fromWasm(args[1], p1));
+                    return voidReturn ? EMPTY_RESULT : new Object[]{result};
+                } catch (Exception e) {
+                    throw unwrap(e);
+                }
+            };
+        }
+
+        // Generic path for 3+ params
+        return args -> {
+            try {
+                Object[] convertedArgs = new Object[paramCount];
+                for (int i = 0; i < paramCount; i++) {
+                    convertedArgs[i] = TypeConverter.fromWasm(args[i], paramTypes[i]);
+                }
+                Object result = method.invoke(target, convertedArgs);
+                return voidReturn ? EMPTY_RESULT : new Object[]{result};
+            } catch (Exception e) {
+                throw unwrap(e);
+            }
+        };
+    }
+
+    private static RuntimeException unwrap(Exception e) {
+        if (e.getCause() instanceof RuntimeException) {
+            return (RuntimeException) e.getCause();
+        }
+        return new RuntimeException("Host function invocation failed", e);
     }
 }
