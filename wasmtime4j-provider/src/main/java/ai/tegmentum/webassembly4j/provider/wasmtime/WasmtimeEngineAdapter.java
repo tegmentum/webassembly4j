@@ -97,6 +97,8 @@ final class WasmtimeEngineAdapter implements Engine {
         wasmtimeConfig.wasmMultiMemory().ifPresent(nativeConfig::wasmMultiMemory);
         wasmtimeConfig.wasmComponentModel().ifPresent(nativeConfig::wasmComponentModel);
         wasmtimeConfig.wasmGc().ifPresent(nativeConfig::wasmGc);
+        wasmtimeConfig.wasmExceptions().ifPresent(nativeConfig::wasmExceptions);
+        wasmtimeConfig.wasmFunctionReferences().ifPresent(nativeConfig::wasmFunctionReferences);
         wasmtimeConfig.craneliftOptLevel().ifPresent(level -> {
             switch (level) {
                 case NONE:

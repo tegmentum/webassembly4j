@@ -15,6 +15,8 @@ public final class WasmtimeConfig implements EngineConfig {
     private final Boolean wasmMultiMemory;
     private final Boolean wasmComponentModel;
     private final Boolean wasmGc;
+    private final Boolean wasmExceptions;
+    private final Boolean wasmFunctionReferences;
 
     private WasmtimeConfig(Builder builder) {
         this.consumeFuel = builder.consumeFuel;
@@ -26,6 +28,8 @@ public final class WasmtimeConfig implements EngineConfig {
         this.wasmMultiMemory = builder.wasmMultiMemory;
         this.wasmComponentModel = builder.wasmComponentModel;
         this.wasmGc = builder.wasmGc;
+        this.wasmExceptions = builder.wasmExceptions;
+        this.wasmFunctionReferences = builder.wasmFunctionReferences;
     }
 
     public Optional<Boolean> consumeFuel() { return Optional.ofNullable(consumeFuel); }
@@ -37,6 +41,8 @@ public final class WasmtimeConfig implements EngineConfig {
     public Optional<Boolean> wasmMultiMemory() { return Optional.ofNullable(wasmMultiMemory); }
     public Optional<Boolean> wasmComponentModel() { return Optional.ofNullable(wasmComponentModel); }
     public Optional<Boolean> wasmGc() { return Optional.ofNullable(wasmGc); }
+    public Optional<Boolean> wasmExceptions() { return Optional.ofNullable(wasmExceptions); }
+    public Optional<Boolean> wasmFunctionReferences() { return Optional.ofNullable(wasmFunctionReferences); }
 
     public static Builder builder() {
         return new Builder();
@@ -52,6 +58,8 @@ public final class WasmtimeConfig implements EngineConfig {
         private Boolean wasmMultiMemory;
         private Boolean wasmComponentModel;
         private Boolean wasmGc;
+        private Boolean wasmExceptions;
+        private Boolean wasmFunctionReferences;
 
         private Builder() {}
 
@@ -64,6 +72,8 @@ public final class WasmtimeConfig implements EngineConfig {
         public Builder wasmMultiMemory(boolean wasmMultiMemory) { this.wasmMultiMemory = wasmMultiMemory; return this; }
         public Builder wasmComponentModel(boolean wasmComponentModel) { this.wasmComponentModel = wasmComponentModel; return this; }
         public Builder wasmGc(boolean wasmGc) { this.wasmGc = wasmGc; return this; }
+        public Builder wasmExceptions(boolean wasmExceptions) { this.wasmExceptions = wasmExceptions; return this; }
+        public Builder wasmFunctionReferences(boolean wasmFunctionReferences) { this.wasmFunctionReferences = wasmFunctionReferences; return this; }
 
         public WasmtimeConfig build() {
             return new WasmtimeConfig(this);
