@@ -50,6 +50,7 @@
         <module>webassembly4j-spring</module>
         <module>webassembly4j-benchmarks</module>
         <module>webassembly4j-bindgen</module>
+        <module>webassembly4j-component-builder</module>
     </modules>
 
     <properties>

@@ -1,0 +1,48 @@
+package graalvm:standalone@0.1.0;
+
+/// Math compatibility imports for operations WASM instructions cannot perform.
+interface compat {
+    /// IEEE 754 remainder for f32
+    f32rem: func(a: f32, b: f32) -> f32;
+    /// IEEE 754 remainder for f64
+    f64rem: func(a: f64, b: f64) -> f64;
+    /// Natural logarithm
+    f64log: func(a: f64) -> f64;
+    /// Base-10 logarithm
+    f64log10: func(a: f64) -> f64;
+    /// Sine
+    f64sin: func(a: f64) -> f64;
+    /// Cosine
+    f64cos: func(a: f64) -> f64;
+    /// Tangent
+    f64tan: func(a: f64) -> f64;
+    /// Hyperbolic tangent
+    f64tanh: func(a: f64) -> f64;
+    /// Exponential
+    f64exp: func(a: f64) -> f64;
+    /// Power function
+    f64pow: func(a: f64, b: f64) -> f64;
+    /// Cube root
+    f64cbrt: func(a: f64, b: f64) -> f64;
+}
+
+/// I/O imports for printing and time.
+interface io {
+    /// Print a single character to a file descriptor.
+    /// fd=1 for stdout, fd=2 for stderr.
+    print-char: func(fd: s32, char-code: s32);
+    /// Get current time in milliseconds as f64.
+    host-time-ms: func() -> f64;
+}
+
+/// Process control.
+interface wasi {
+    /// Terminate the process with an exit code.
+    proc-exit: func(code: s32);
+}
+
+world standalone {
+    import compat;
+    import io;
+    import wasi;
+}
