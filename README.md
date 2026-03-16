@@ -118,7 +118,13 @@ try (WasmInstance inst = compiled.instantiate()) {
 | `wamr4j-provider` | WAMR (via wamr4j) | 17+ | 100 |
 | `chicory4j-provider` | Chicory (pure Java) | 11+ | 50 |
 
-Providers are discovered automatically via `ServiceLoader`. When multiple providers are on the classpath, the one with the highest priority is selected. Add any provider as a dependency and it works -- no configuration needed.
+Providers are discovered automatically via `ServiceLoader`. When multiple providers are on the classpath, the one with the highest priority is selected. To select a specific provider, use the builder:
+
+```java
+Engine engine = WebAssembly.builder()
+    .provider("chicory")  // "wasmtime", "wamr", "graalwasm", or "chicory"
+    .build();
+```
 
 ## WasmGC Object Bridge
 
