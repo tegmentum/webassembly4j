@@ -63,7 +63,7 @@
         <junit.version>5.10.4</junit.version>
         <wasmtime4j.version>42.0.1-1.0.0</wasmtime4j.version>
         <wamr4j.version>2.4.4-1.0.0</wamr4j.version>
-        <chicory.version>1.0.0</chicory.version>
+        <chicory.version>1.7.3</chicory.version>
         <graalvm.version>24.2.1</graalvm.version>
         <jmh.version>1.37</jmh.version>
         <jackson.version>2.15.2</jackson.version>

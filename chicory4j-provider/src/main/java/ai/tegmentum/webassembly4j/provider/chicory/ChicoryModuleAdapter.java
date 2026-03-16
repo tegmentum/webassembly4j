@@ -18,6 +18,7 @@ import com.dylibso.chicory.wasm.types.ExternalType;
 import com.dylibso.chicory.wasm.types.FunctionImport;
 import com.dylibso.chicory.wasm.types.FunctionType;
 import com.dylibso.chicory.wasm.types.Import;
+import com.dylibso.chicory.wasm.types.ValType;
 import com.dylibso.chicory.wasm.types.Value;
 
 import java.util.ArrayList;
@@ -65,14 +66,12 @@ final class ChicoryModuleAdapter implements Module {
             List<com.dylibso.chicory.runtime.ImportFunction> functions = new ArrayList<>();
 
             for (HostFunctionDefinition def : hostFunctions) {
-                List<com.dylibso.chicory.wasm.types.ValueType> paramTypes =
-                        convertToChicoryTypes(def.parameterTypes());
-                List<com.dylibso.chicory.wasm.types.ValueType> returnTypes =
-                        convertToChicoryTypes(def.resultTypes());
+                List<ValType> paramTypes = convertToChicoryTypes(def.parameterTypes());
+                List<ValType> returnTypes = convertToChicoryTypes(def.resultTypes());
 
                 HostFunction hostFunc = new HostFunction(
                         def.moduleName(), def.functionName(),
-                        paramTypes, returnTypes,
+                        FunctionType.of(paramTypes, returnTypes),
                         (instance, args) -> {
                             Object[] javaArgs = extractLongValues(args, def.parameterTypes());
                             Object[] results = def.function().execute(javaArgs);
@@ -97,24 +96,23 @@ final class ChicoryModuleAdapter implements Module {
         }
     }
 
-    private static List<com.dylibso.chicory.wasm.types.ValueType> convertToChicoryTypes(
-            ValueType[] types) {
-        List<com.dylibso.chicory.wasm.types.ValueType> result = new ArrayList<>(types.length);
+    private static List<ValType> convertToChicoryTypes(ValueType[] types) {
+        List<ValType> result = new ArrayList<>(types.length);
         for (ValueType type : types) {
             result.add(convertToChicoryType(type));
         }
         return result;
     }
 
-    private static com.dylibso.chicory.wasm.types.ValueType convertToChicoryType(ValueType type) {
+    private static ValType convertToChicoryType(ValueType type) {
         switch (type) {
-            case I32: return com.dylibso.chicory.wasm.types.ValueType.I32;
-            case I64: return com.dylibso.chicory.wasm.types.ValueType.I64;
-            case F32: return com.dylibso.chicory.wasm.types.ValueType.F32;
-            case F64: return com.dylibso.chicory.wasm.types.ValueType.F64;
-            case V128: return com.dylibso.chicory.wasm.types.ValueType.V128;
-            case FUNCREF: return com.dylibso.chicory.wasm.types.ValueType.FuncRef;
-            case EXTERNREF: return com.dylibso.chicory.wasm.types.ValueType.ExternRef;
+            case I32: return ValType.I32;
+            case I64: return ValType.I64;
+            case F32: return ValType.F32;
+            case F64: return ValType.F64;
+            case V128: return ValType.V128;
+            case FUNCREF: return ValType.FuncRef;
+            case EXTERNREF: return ValType.ExternRef;
             default: throw new IllegalArgumentException("Unknown type: " + type);
         }
     }
@@ -237,8 +235,7 @@ final class ChicoryModuleAdapter implements Module {
         }
     }
 
-    private static ValueType[] convertChicoryTypes(
-            List<com.dylibso.chicory.wasm.types.ValueType> types) {
+    private static ValueType[] convertChicoryTypes(List<ValType> types) {
         ValueType[] result = new ValueType[types.size()];
         for (int i = 0; i < types.size(); i++) {
             result[i] = convertChicoryType(types.get(i));
@@ -246,14 +243,14 @@ final class ChicoryModuleAdapter implements Module {
         return result;
     }
 
-    private static ValueType convertChicoryType(com.dylibso.chicory.wasm.types.ValueType type) {
-        if (type == com.dylibso.chicory.wasm.types.ValueType.I32) return ValueType.I32;
-        if (type == com.dylibso.chicory.wasm.types.ValueType.I64) return ValueType.I64;
-        if (type == com.dylibso.chicory.wasm.types.ValueType.F32) return ValueType.F32;
-        if (type == com.dylibso.chicory.wasm.types.ValueType.F64) return ValueType.F64;
-        if (type == com.dylibso.chicory.wasm.types.ValueType.V128) return ValueType.V128;
-        if (type == com.dylibso.chicory.wasm.types.ValueType.FuncRef) return ValueType.FUNCREF;
-        if (type == com.dylibso.chicory.wasm.types.ValueType.ExternRef) return ValueType.EXTERNREF;
+    private static ValueType convertChicoryType(ValType type) {
+        if (type .equals(ValType.I32)) return ValueType.I32;
+        if (type .equals(ValType.I64)) return ValueType.I64;
+        if (type .equals(ValType.F32)) return ValueType.F32;
+        if (type .equals(ValType.F64)) return ValueType.F64;
+        if (type .equals(ValType.V128)) return ValueType.V128;
+        if (type .equals(ValType.FuncRef)) return ValueType.FUNCREF;
+        if (type .equals(ValType.ExternRef)) return ValueType.EXTERNREF;
         return ValueType.I32;
     }
 

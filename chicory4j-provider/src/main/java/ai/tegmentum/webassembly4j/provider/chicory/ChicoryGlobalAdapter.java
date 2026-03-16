@@ -4,6 +4,7 @@ import ai.tegmentum.webassembly4j.api.Global;
 import ai.tegmentum.webassembly4j.api.ValueType;
 import com.dylibso.chicory.runtime.GlobalInstance;
 import com.dylibso.chicory.wasm.types.MutabilityType;
+import com.dylibso.chicory.wasm.types.ValType;
 import com.dylibso.chicory.wasm.types.Value;
 
 import java.util.Optional;
@@ -24,33 +25,34 @@ final class ChicoryGlobalAdapter implements Global {
     @Override
     public Object get() {
         long raw = nativeGlobal.getValue();
-        switch (nativeGlobal.getType()) {
-            case I32: return (int) raw;
-            case I64: return raw;
-            case F32: return Value.longToFloat(raw);
-            case F64: return Value.longToDouble(raw);
-            default: return raw;
+        ValType type = nativeGlobal.getType();
+        if (type .equals(ValType.I32)) {
+            return (int) raw;
+        } else if (type .equals(ValType.I64)) {
+            return raw;
+        } else if (type .equals(ValType.F32)) {
+            return Value.longToFloat(raw);
+        } else if (type .equals(ValType.F64)) {
+            return Value.longToDouble(raw);
+        } else {
+            return raw;
         }
     }
 
     @Override
     public void set(Object value) {
         Number num = (Number) value;
-        switch (nativeGlobal.getType()) {
-            case I32:
-                nativeGlobal.setValue(num.intValue());
-                break;
-            case I64:
-                nativeGlobal.setValue(num.longValue());
-                break;
-            case F32:
-                nativeGlobal.setValue(Value.floatToLong(num.floatValue()));
-                break;
-            case F64:
-                nativeGlobal.setValue(Value.doubleToLong(num.doubleValue()));
-                break;
-            default:
-                nativeGlobal.setValue(num.longValue());
+        ValType type = nativeGlobal.getType();
+        if (type .equals(ValType.I32)) {
+            nativeGlobal.setValue(num.intValue());
+        } else if (type .equals(ValType.I64)) {
+            nativeGlobal.setValue(num.longValue());
+        } else if (type .equals(ValType.F32)) {
+            nativeGlobal.setValue(Value.floatToLong(num.floatValue()));
+        } else if (type .equals(ValType.F64)) {
+            nativeGlobal.setValue(Value.doubleToLong(num.doubleValue()));
+        } else {
+            nativeGlobal.setValue(num.longValue());
         }
     }
 
@@ -68,11 +70,11 @@ final class ChicoryGlobalAdapter implements Global {
         return Optional.empty();
     }
 
-    private static ValueType convertType(com.dylibso.chicory.wasm.types.ValueType chicoryType) {
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.I32) return ValueType.I32;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.I64) return ValueType.I64;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.F32) return ValueType.F32;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.F64) return ValueType.F64;
+    private static ValueType convertType(ValType chicoryType) {
+        if (chicoryType .equals(ValType.I32)) return ValueType.I32;
+        if (chicoryType .equals(ValType.I64)) return ValueType.I64;
+        if (chicoryType .equals(ValType.F32)) return ValueType.F32;
+        if (chicoryType .equals(ValType.F64)) return ValueType.F64;
         throw new IllegalArgumentException("Unknown type: " + chicoryType);
     }
 }

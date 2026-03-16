@@ -6,6 +6,7 @@ import ai.tegmentum.webassembly4j.api.exception.ExecutionException;
 import ai.tegmentum.webassembly4j.api.exception.TrapException;
 import com.dylibso.chicory.runtime.ExportFunction;
 import com.dylibso.chicory.wasm.types.FunctionType;
+import com.dylibso.chicory.wasm.types.ValType;
 
 import java.util.List;
 
@@ -18,8 +19,8 @@ final class ChicoryFunctionAdapter implements Function {
     private final ExportFunction nativeFunction;
     private final FunctionType functionType;
     private final int paramCount;
-    private final List<com.dylibso.chicory.wasm.types.ValueType> cachedParamTypes;
-    private final List<com.dylibso.chicory.wasm.types.ValueType> cachedReturnTypes;
+    private final List<ValType> cachedParamTypes;
+    private final List<ValType> cachedReturnTypes;
     private final long[] argScratch;
     private final FastPath fastPath;
 
@@ -36,37 +37,37 @@ final class ChicoryFunctionAdapter implements Function {
     private FastPath classifySignature() {
         boolean voidReturn = cachedReturnTypes.isEmpty();
         boolean i32Return = cachedReturnTypes.size() == 1
-                && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32;
+                && cachedReturnTypes.get(0) .equals(ValType.I32);
         boolean i64Return = cachedReturnTypes.size() == 1
-                && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I64;
+                && cachedReturnTypes.get(0) .equals(ValType.I64);
         boolean f64Return = cachedReturnTypes.size() == 1
-                && cachedReturnTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.F64;
+                && cachedReturnTypes.get(0) .equals(ValType.F64);
 
         if (voidReturn && paramCount == 0) return FastPath.V_V;
         if (voidReturn && paramCount == 1
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
+                && cachedParamTypes.get(0) .equals(ValType.I32))
             return FastPath.I_V;
         if (voidReturn && paramCount == 2
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32
-                && cachedParamTypes.get(1) == com.dylibso.chicory.wasm.types.ValueType.I32)
+                && cachedParamTypes.get(0) .equals(ValType.I32)
+                && cachedParamTypes.get(1) .equals(ValType.I32))
             return FastPath.II_V;
         if (i32Return && paramCount == 0) return FastPath.V_I;
         if (i32Return && paramCount == 1
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
+                && cachedParamTypes.get(0) .equals(ValType.I32))
             return FastPath.I_I;
         if (i32Return && paramCount == 2
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32
-                && cachedParamTypes.get(1) == com.dylibso.chicory.wasm.types.ValueType.I32)
+                && cachedParamTypes.get(0) .equals(ValType.I32)
+                && cachedParamTypes.get(1) .equals(ValType.I32))
             return FastPath.II_I;
         if (i64Return && paramCount == 0) return FastPath.V_J;
         if (i64Return && paramCount == 1
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I32)
+                && cachedParamTypes.get(0) .equals(ValType.I32))
             return FastPath.I_J;
         if (i64Return && paramCount == 1
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.I64)
+                && cachedParamTypes.get(0) .equals(ValType.I64))
             return FastPath.J_J;
         if (f64Return && paramCount == 1
-                && cachedParamTypes.get(0) == com.dylibso.chicory.wasm.types.ValueType.F64)
+                && cachedParamTypes.get(0) .equals(ValType.F64))
             return FastPath.D_D;
         return FastPath.GENERIC;
     }
@@ -156,39 +157,36 @@ final class ChicoryFunctionAdapter implements Function {
         return argScratch;
     }
 
-    private long convertToLong(Object value, com.dylibso.chicory.wasm.types.ValueType type) {
+    private long convertToLong(Object value, ValType type) {
         Number num = (Number) value;
-        switch (type) {
-            case I32:
-                return num.intValue();
-            case I64:
-                return num.longValue();
-            case F32:
-                return com.dylibso.chicory.wasm.types.Value.floatToLong(num.floatValue());
-            case F64:
-                return com.dylibso.chicory.wasm.types.Value.doubleToLong(num.doubleValue());
-            default:
-                throw new ExecutionException("Unsupported parameter type: " + type);
+        if (ValType.I32.equals(type)) {
+            return num.intValue();
+        } else if (ValType.I64.equals(type)) {
+            return num.longValue();
+        } else if (ValType.F32.equals(type)) {
+            return com.dylibso.chicory.wasm.types.Value.floatToLong(num.floatValue());
+        } else if (ValType.F64.equals(type)) {
+            return com.dylibso.chicory.wasm.types.Value.doubleToLong(num.doubleValue());
+        } else {
+            throw new ExecutionException("Unsupported parameter type: " + type);
         }
     }
 
-    private Object extractValue(long raw, com.dylibso.chicory.wasm.types.ValueType type) {
-        switch (type) {
-            case I32:
-                return (int) raw;
-            case I64:
-                return raw;
-            case F32:
-                return com.dylibso.chicory.wasm.types.Value.longToFloat(raw);
-            case F64:
-                return com.dylibso.chicory.wasm.types.Value.longToDouble(raw);
-            default:
-                return raw;
+    private Object extractValue(long raw, ValType type) {
+        if (ValType.I32.equals(type)) {
+            return (int) raw;
+        } else if (ValType.I64.equals(type)) {
+            return raw;
+        } else if (ValType.F32.equals(type)) {
+            return com.dylibso.chicory.wasm.types.Value.longToFloat(raw);
+        } else if (ValType.F64.equals(type)) {
+            return com.dylibso.chicory.wasm.types.Value.longToDouble(raw);
+        } else {
+            return raw;
         }
     }
 
-    private static ValueType[] convertTypes(
-            List<com.dylibso.chicory.wasm.types.ValueType> chicoryTypes) {
+    private static ValueType[] convertTypes(List<ValType> chicoryTypes) {
         ValueType[] types = new ValueType[chicoryTypes.size()];
         for (int i = 0; i < chicoryTypes.size(); i++) {
             types[i] = convertType(chicoryTypes.get(i));
@@ -196,14 +194,14 @@ final class ChicoryFunctionAdapter implements Function {
         return types;
     }
 
-    private static ValueType convertType(com.dylibso.chicory.wasm.types.ValueType chicoryType) {
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.I32) return ValueType.I32;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.I64) return ValueType.I64;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.F32) return ValueType.F32;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.F64) return ValueType.F64;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.V128) return ValueType.V128;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.FuncRef) return ValueType.FUNCREF;
-        if (chicoryType == com.dylibso.chicory.wasm.types.ValueType.ExternRef) return ValueType.EXTERNREF;
+    private static ValueType convertType(ValType chicoryType) {
+        if (chicoryType .equals(ValType.I32)) return ValueType.I32;
+        if (chicoryType .equals(ValType.I64)) return ValueType.I64;
+        if (chicoryType .equals(ValType.F32)) return ValueType.F32;
+        if (chicoryType .equals(ValType.F64)) return ValueType.F64;
+        if (chicoryType .equals(ValType.V128)) return ValueType.V128;
+        if (chicoryType .equals(ValType.FuncRef)) return ValueType.FUNCREF;
+        if (chicoryType .equals(ValType.ExternRef)) return ValueType.EXTERNREF;
         throw new IllegalArgumentException("Unknown type: " + chicoryType);
     }
 }
