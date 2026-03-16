@@ -61,13 +61,17 @@ class JavaToWasmRoundTripTest {
         String compat = "graalvm:standalone/compat@0.1.0";
         String wasi = "graalvm:standalone/wasi@0.1.0";
 
-        // io.print-char(fd: i32, char_code: i32)
-        ctx.addHostFunction(io, "print-char",
-                new ValueType[]{ValueType.I32, ValueType.I32}, new ValueType[]{},
+        // io.print-buffer(fd: i32, ptr: i32, num_chars: i32)
+        // Reads 16-bit chars from linear memory and collects them
+        ctx.addHostFunction(io, "print-buffer",
+                new ValueType[]{ValueType.I32, ValueType.I32, ValueType.I32}, new ValueType[]{},
                 args -> {
                     int fd = ((Number) args[0]).intValue();
-                    int ch = ((Number) args[1]).intValue();
-                    printedChars.add(new int[]{fd, ch});
+                    int ptr = ((Number) args[1]).intValue();
+                    int numChars = ((Number) args[2]).intValue();
+                    for (int i = 0; i < numChars; i++) {
+                        printedChars.add(new int[]{fd, ptr + i * 2});
+                    }
                     return new Object[]{};
                 });
 

@@ -31,6 +31,9 @@ interface io {
     /// Print a single character to a file descriptor.
     /// fd=1 for stdout, fd=2 for stderr.
     print-char: func(fd: s32, char-code: s32);
+    /// Print characters from the module's linear memory buffer.
+    /// Reads num-chars 16-bit characters starting at byte offset ptr.
+    print-buffer: func(fd: s32, ptr: s32, num-chars: s32);
     /// Get current time in milliseconds as f64.
     host-time-ms: func() -> f64;
 }
