@@ -112,6 +112,11 @@
                 <version>${chicory.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.dylibso.chicory</groupId>
+                <artifactId>wasi</artifactId>
+                <version>${chicory.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.graalvm.polyglot</groupId>
                 <artifactId>polyglot</artifactId>
                 <version>${graalvm.version}</version>

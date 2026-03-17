@@ -7,11 +7,14 @@ import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.ValueType;
+import ai.tegmentum.webassembly4j.api.WasiContext;
 import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
 import ai.tegmentum.webassembly4j.api.exception.LinkingException;
-import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
 import com.dylibso.chicory.runtime.HostFunction;
+import com.dylibso.chicory.runtime.ImportFunction;
 import com.dylibso.chicory.runtime.ImportValues;
+import com.dylibso.chicory.wasi.WasiOptions;
+import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.WasmModule;
 import com.dylibso.chicory.wasm.types.Export;
 import com.dylibso.chicory.wasm.types.ExternalType;
@@ -21,9 +24,12 @@ import com.dylibso.chicory.wasm.types.Import;
 import com.dylibso.chicory.wasm.types.ValType;
 import com.dylibso.chicory.wasm.types.Value;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 final class ChicoryModuleAdapter implements Module {
 
@@ -51,20 +57,35 @@ final class ChicoryModuleAdapter implements Module {
             return instantiate();
         }
 
-        if (linkingContext.wasiContext() != null) {
-            throw new UnsupportedFeatureException(
-                    "WASI is not supported by the Chicory provider");
-        }
-
-        List<HostFunctionDefinition> hostFunctions = linkingContext.hostFunctions();
-        if (hostFunctions.isEmpty()) {
-            return instantiate();
-        }
-
         try {
-            ImportValues.Builder importBuilder = ImportValues.builder();
-            List<com.dylibso.chicory.runtime.ImportFunction> functions = new ArrayList<>();
+            List<ImportFunction> functions = new ArrayList<>();
 
+            if (linkingContext.wasiContext() != null) {
+                WasiContext wasiCtx = linkingContext.wasiContext();
+                WasiOptions.Builder wasiBuilder = WasiOptions.builder();
+
+                if (!wasiCtx.args().isEmpty()) {
+                    wasiBuilder.withArguments(wasiCtx.args());
+                }
+                for (Map.Entry<String, String> entry : wasiCtx.env().entrySet()) {
+                    wasiBuilder.withEnvironment(entry.getKey(), entry.getValue());
+                }
+                if (wasiCtx.inheritStdin() || wasiCtx.inheritStdout() || wasiCtx.inheritStderr()) {
+                    wasiBuilder.inheritSystem();
+                }
+                for (String dir : wasiCtx.preopenDirs()) {
+                    wasiBuilder.withDirectory(dir, Paths.get(dir));
+                }
+
+                WasiPreview1 wasi = WasiPreview1.builder()
+                        .withOptions(wasiBuilder.build())
+                        .build();
+
+                HostFunction[] wasiFunctions = wasi.toHostFunctions();
+                functions.addAll(Arrays.asList(wasiFunctions));
+            }
+
+            List<HostFunctionDefinition> hostFunctions = linkingContext.hostFunctions();
             for (HostFunctionDefinition def : hostFunctions) {
                 List<ValType> paramTypes = convertToChicoryTypes(def.parameterTypes());
                 List<ValType> returnTypes = convertToChicoryTypes(def.resultTypes());
@@ -83,6 +104,11 @@ final class ChicoryModuleAdapter implements Module {
                 functions.add(hostFunc);
             }
 
+            if (functions.isEmpty()) {
+                return instantiate();
+            }
+
+            ImportValues.Builder importBuilder = ImportValues.builder();
             importBuilder.withFunctions(functions);
             ImportValues imports = importBuilder.build();
 

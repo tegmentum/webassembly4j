@@ -55,9 +55,12 @@ class ChicoryProviderTest {
             EngineCapabilities caps = engine.capabilities();
             assertTrue(caps.supportsCoreModules());
             assertFalse(caps.supportsComponents());
-            assertFalse(caps.supportsWasi());
+            assertTrue(caps.supportsWasi());
             assertFalse(caps.supportsFuel());
             assertFalse(caps.supportsNativeInterop());
+            assertTrue(caps.supportsGc());
+            assertTrue(caps.supportsThreads());
+            assertTrue(caps.supportsReferenceTypes());
         }
     }
 

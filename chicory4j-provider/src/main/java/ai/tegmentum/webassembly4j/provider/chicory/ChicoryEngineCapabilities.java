@@ -16,7 +16,7 @@ final class ChicoryEngineCapabilities implements EngineCapabilities {
 
     @Override
     public boolean supportsWasi() {
-        return false;
+        return true;
     }
 
     @Override
@@ -31,17 +31,17 @@ final class ChicoryEngineCapabilities implements EngineCapabilities {
 
     @Override
     public boolean supportsThreads() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean supportsGc() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean supportsReferenceTypes() {
-        return false;
+        return true;
     }
 
     @Override

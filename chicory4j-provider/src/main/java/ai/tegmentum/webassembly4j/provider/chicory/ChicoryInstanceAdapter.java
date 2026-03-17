@@ -5,6 +5,7 @@ import ai.tegmentum.webassembly4j.api.Global;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Table;
+import ai.tegmentum.webassembly4j.api.gc.GcExtension;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -78,6 +79,15 @@ final class ChicoryInstanceAdapter implements Instance {
         } catch (Exception e) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> Optional<T> extension(Class<T> extensionType) {
+        if (extensionType == GcExtension.class) {
+            return Optional.of((T) new ChicoryGcExtension());
+        }
+        return Optional.empty();
     }
 
     @Override
