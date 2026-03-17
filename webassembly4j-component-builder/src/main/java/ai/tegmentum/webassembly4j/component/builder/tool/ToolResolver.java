@@ -50,6 +50,48 @@ public final class ToolResolver {
     }
 
     /**
+     * Resolves the web-image tool from a GraalVM distribution with standalone WASM support.
+     * <p>
+     * Search order:
+     * <ol>
+     *   <li>{@code GRAALVM_HOME/bin/web-image}</li>
+     *   <li>{@code web-image} on PATH</li>
+     *   <li>Auto-download from tegmentum/graal GitHub release</li>
+     * </ol>
+     *
+     * @param autoDownload whether to auto-download if not found locally
+     * @return the resolved tool
+     */
+    public static Optional<ExternalTool> resolveWebImage(boolean autoDownload) {
+        // Check GRAALVM_HOME first
+        String graalvmHome = System.getenv("GRAALVM_HOME");
+        if (graalvmHome != null) {
+            Path webImage = Paths.get(graalvmHome, "bin", "web-image");
+            if (Files.isExecutable(webImage)) {
+                String version = getToolVersion(webImage, "--version");
+                return Optional.of(new ExternalTool("web-image", webImage, version));
+            }
+        }
+
+        // Check PATH
+        Optional<ExternalTool> onPath = resolveOnPath("web-image", "--version");
+        if (onPath.isPresent()) {
+            return onPath;
+        }
+
+        // Auto-download
+        if (autoDownload) {
+            try {
+                return Optional.of(GraalVMDistribution.resolveWebImage());
+            } catch (Exception e) {
+                return Optional.empty();
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
      * Resolves wasm-tools.
      *
      * @return the resolved tool, or empty if not found
@@ -84,6 +126,10 @@ public final class ToolResolver {
         }
 
         return Optional.empty();
+    }
+
+    static String getToolVersionSafe(Path executable, String versionFlag) {
+        return getToolVersion(executable, versionFlag);
     }
 
     private static String getToolVersion(Path executable, String versionFlag) {

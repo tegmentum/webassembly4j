@@ -25,27 +25,47 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Invokes GraalVM native-image with {@code --tool:svm-wasm} to compile Java to WASM.
+ * Invokes GraalVM web-image to compile Java to standalone WasmGC.
  *
- * <p>Requires GraalVM 25 EA+ and Binaryen v119+.
+ * <p>Uses the tegmentum/graal fork with {@code -H:+StandaloneWasm} support.
+ * The tool is resolved via {@code GRAALVM_HOME}, PATH, or auto-downloaded.
  */
 public final class NativeImageCompiler {
 
-    private final ExternalTool nativeImage;
+    private final ExternalTool webImage;
 
+    /**
+     * Creates a compiler, auto-downloading GraalVM if needed.
+     */
     public NativeImageCompiler() {
-        this.nativeImage = ToolResolver.resolveNativeImage()
-                .orElseThrow(() -> new ComponentBuilderException(
-                        "native-image not found. Set GRAALVM_HOME or add native-image to PATH. " +
-                                "Requires GraalVM 25 EA+."));
-    }
-
-    public NativeImageCompiler(ExternalTool nativeImage) {
-        this.nativeImage = nativeImage;
+        this(true);
     }
 
     /**
-     * Compiles Java classes to WASM using GraalVM Web Image.
+     * Creates a compiler with optional auto-download.
+     *
+     * @param autoDownload whether to download GraalVM if not found locally
+     */
+    public NativeImageCompiler(boolean autoDownload) {
+        this.webImage = ToolResolver.resolveWebImage(autoDownload)
+                .orElseThrow(() -> new ComponentBuilderException(
+                        "web-image not found. Set GRAALVM_HOME or add web-image to PATH. " +
+                                "The tool is available from https://github.com/tegmentum/graal/releases"));
+    }
+
+    public NativeImageCompiler(ExternalTool webImage) {
+        this.webImage = webImage;
+    }
+
+    /**
+     * Returns the resolved web-image tool.
+     */
+    public ExternalTool getTool() {
+        return webImage;
+    }
+
+    /**
+     * Compiles Java classes to standalone WasmGC.
      *
      * @param classpath the classpath entries joined by the path separator
      * @param mainClass the main class to compile
@@ -56,9 +76,11 @@ public final class NativeImageCompiler {
     public CompilationResult compile(String classpath, String mainClass,
                                      Path outputDir, String name) {
         List<String> command = new ArrayList<>();
-        command.add(nativeImage.getExecutablePath().toString());
-        command.add("--tool:svm-wasm");
+        command.add(webImage.getExecutablePath().toString());
+        command.add("-H:+StandaloneWasm");
+        command.add("-H:Backend=WASMGC");
         command.add("-H:-AutoRunVM");
+        command.add("-H:+UseBinaryen");
         command.add("-cp");
         command.add(classpath);
         command.add("-o");
