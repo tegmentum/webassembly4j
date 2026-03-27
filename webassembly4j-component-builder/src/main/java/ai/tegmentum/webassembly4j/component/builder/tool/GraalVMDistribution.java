@@ -155,7 +155,7 @@ public final class GraalVMDistribution {
     /**
      * Detects the current platform in the format used by release artifact names.
      *
-     * @return platform string like "darwin-aarch64" or "linux-x64"
+     * @return platform string like "darwin-aarch64", "linux-x64", or "windows-x64"
      */
     static String detectPlatform() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
@@ -176,7 +176,8 @@ public final class GraalVMDistribution {
         if (arch.equals("aarch64") || arch.equals("arm64")) {
             archName = "aarch64";
         } else if (arch.equals("amd64") || arch.equals("x86_64")) {
-            archName = "x64";
+            // macOS Intel uses x86_64 in the artifact name
+            archName = osName.equals("darwin") ? "x86_64" : "x64";
         } else {
             archName = arch;
         }
