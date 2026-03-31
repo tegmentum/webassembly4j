@@ -1,115 +1,87 @@
 package ai.tegmentum.webassembly4j.runtime.component;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
- * Extracts a core WASM module from a component model binary using
- * {@code wasm-tools component lower}.
+ * Extracts the first core WASM module from a component model binary.
  * <p>
- * This enables runtimes that only support core modules (Chicory, WAMR, GraalWasm)
- * to execute component model WASM by lowering it to the canonical ABI core module
- * representation.
+ * The component binary format ({@code \0asm\x0d\x00\x01\x00}) contains sections,
+ * each with a 1-byte ID and LEB128-encoded size. Section ID 1 contains an
+ * embedded core WASM module as a complete binary.
+ * <p>
+ * This is a pure Java implementation — no external tools required.
  */
 public final class ComponentLowerer {
+
+    /** Component binary format section ID for an embedded core module. */
+    private static final int SECTION_CORE_MODULE = 1;
+
+    /** Size of the component binary header: \0asm + 4 version bytes. */
+    private static final int HEADER_SIZE = 8;
 
     private ComponentLowerer() {}
 
     /**
-     * Lowers a component to a core module.
+     * Extracts the first core module from a component binary.
      *
      * @param componentBytes the component model WASM binary
      * @return the core module bytes
-     * @throws RuntimeException if wasm-tools is not available or lowering fails
+     * @throws IllegalArgumentException if the bytes are not a valid component
+     *         or contain no core module
      */
     public static byte[] lower(byte[] componentBytes) {
-        Path wasmTools = findWasmTools();
-        if (wasmTools == null) {
-            throw new RuntimeException(
-                    "Cannot lower component: wasm-tools not found on PATH or WASM_TOOLS_HOME. " +
-                    "Install wasm-tools (https://github.com/bytecodealliance/wasm-tools) or use a " +
-                    "provider that supports the component model natively (e.g. wasmtime).");
+        if (!WasmBinaryInfo.isComponent(componentBytes)) {
+            throw new IllegalArgumentException("Not a component model binary");
         }
 
-        Path tempDir = null;
-        try {
-            tempDir = Files.createTempDirectory("webassembly4j-lower");
-            Path componentFile = tempDir.resolve("component.wasm");
-            Path coreFile = tempDir.resolve("core.wasm");
+        int offset = HEADER_SIZE;
 
-            Files.write(componentFile, componentBytes);
-
-            List<String> command = Arrays.asList(
-                    wasmTools.toString(), "component", "lower",
-                    componentFile.toString(), "-o", coreFile.toString());
-
-            Process process = new ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .start();
-
-            boolean finished = process.waitFor(60, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                throw new RuntimeException("wasm-tools component lower timed out");
+        while (offset < componentBytes.length) {
+            if (offset >= componentBytes.length) {
+                break;
             }
 
-            if (process.exitValue() != 0) {
-                String output;
-                try (InputStream is = process.getInputStream()) {
-                    byte[] buf = new byte[4096];
-                    int n = is.read(buf);
-                    output = n > 0 ? new String(buf, 0, n) : "";
-                }
-                throw new RuntimeException(
-                        "wasm-tools component lower failed (exit " + process.exitValue() + "): " +
-                        output);
+            int sectionId = componentBytes[offset] & 0xFF;
+            offset++;
+
+            long[] sizeResult = readLeb128(componentBytes, offset);
+            int sectionSize = (int) sizeResult[0];
+            offset = (int) sizeResult[1];
+
+            if (sectionId == SECTION_CORE_MODULE) {
+                // The section payload is a complete core WASM module binary
+                return Arrays.copyOfRange(componentBytes, offset, offset + sectionSize);
             }
 
-            return Files.readAllBytes(coreFile);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to lower component to core module", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while lowering component", e);
-        } finally {
-            if (tempDir != null) {
-                try {
-                    Files.deleteIfExists(tempDir.resolve("component.wasm"));
-                    Files.deleteIfExists(tempDir.resolve("core.wasm"));
-                    Files.deleteIfExists(tempDir);
-                } catch (IOException ignored) {
-                }
-            }
+            offset += sectionSize;
         }
+
+        throw new IllegalArgumentException(
+                "Component binary contains no embedded core module");
     }
 
-    private static Path findWasmTools() {
-        String home = System.getenv("WASM_TOOLS_HOME");
-        if (home != null) {
-            Path p = Path.of(home, "wasm-tools");
-            if (Files.isExecutable(p)) {
-                return p;
-            }
-            p = Path.of(home);
-            if (Files.isExecutable(p) && p.getFileName().toString().startsWith("wasm-tools")) {
-                return p;
-            }
-        }
+    /**
+     * Reads an unsigned LEB128 value from the byte array.
+     *
+     * @return a two-element array: [value, newOffset]
+     */
+    private static long[] readLeb128(byte[] bytes, int offset) {
+        long result = 0;
+        int shift = 0;
+        int pos = offset;
 
-        String pathEnv = System.getenv("PATH");
-        if (pathEnv != null) {
-            for (String dir : pathEnv.split(System.getProperty("path.separator"))) {
-                Path p = Path.of(dir, "wasm-tools");
-                if (Files.isExecutable(p)) {
-                    return p;
-                }
+        while (pos < bytes.length) {
+            int b = bytes[pos] & 0xFF;
+            pos++;
+            result |= (long) (b & 0x7F) << shift;
+            if ((b & 0x80) == 0) {
+                return new long[]{result, pos};
+            }
+            shift += 7;
+            if (shift >= 64) {
+                throw new IllegalArgumentException("LEB128 value too large at offset " + offset);
             }
         }
-        return null;
+        throw new IllegalArgumentException("Truncated LEB128 at offset " + offset);
     }
 }
