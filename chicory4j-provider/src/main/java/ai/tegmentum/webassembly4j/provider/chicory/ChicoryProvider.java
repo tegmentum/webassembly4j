@@ -3,6 +3,7 @@ package ai.tegmentum.webassembly4j.provider.chicory;
 import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.config.EngineConfig;
 import ai.tegmentum.webassembly4j.api.config.WebAssemblyConfig;
+import ai.tegmentum.webassembly4j.provider.chicory.config.ChicoryConfig;
 import ai.tegmentum.webassembly4j.spi.EngineProvider;
 import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
 import ai.tegmentum.webassembly4j.spi.ProviderDescriptor;
@@ -53,7 +54,7 @@ public final class ChicoryProvider implements EngineProvider {
 
     @Override
     public boolean supports(EngineConfig engineConfig) {
-        return false;
+        return engineConfig instanceof ChicoryConfig;
     }
 
     @Override
