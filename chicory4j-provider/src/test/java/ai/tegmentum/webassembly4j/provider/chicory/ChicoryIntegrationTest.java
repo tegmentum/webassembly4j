@@ -7,7 +7,9 @@ import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.ValueType;
+import ai.tegmentum.webassembly4j.api.config.WebAssemblyConfig;
 import ai.tegmentum.webassembly4j.api.exception.WebAssemblyException;
+import ai.tegmentum.webassembly4j.provider.chicory.config.ChicoryConfig;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -124,6 +126,45 @@ class ChicoryIntegrationTest {
     @Test
     void hostFunctionLinking() {
         try (Engine engine = ChicoryEngineAdapter.create(null);
+             Module module = engine.loadModule(IMPORT_MODULE)) {
+            DefaultLinkingContext ctx = DefaultLinkingContext.builder()
+                    .addHostFunction("env", "add_offset",
+                            new ValueType[] { ValueType.I32 },
+                            new ValueType[] { ValueType.I32 },
+                            args -> new Object[] { ((Number) args[0]).intValue() + 100 })
+                    .build();
+
+            Instance instance = module.instantiate(ctx);
+            Function callHost = instance.function("call_host").orElseThrow();
+            assertEquals(142, callHost.invoke(42));
+        }
+    }
+
+    @Test
+    void runtimeCompilationMode() {
+        WebAssemblyConfig config = WebAssemblyConfig.builder()
+                .engineConfig(ChicoryConfig.builder()
+                        .executionMode(ChicoryConfig.ExecutionMode.COMPILE)
+                        .build())
+                .build();
+
+        try (Engine engine = ChicoryEngineAdapter.create(config);
+             Module module = engine.loadModule(ADD_MODULE)) {
+            Instance instance = module.instantiate();
+            Function add = instance.function("add").orElseThrow();
+            assertEquals(7, add.invoke(3, 4));
+        }
+    }
+
+    @Test
+    void compilationModeWithHostFunctions() {
+        WebAssemblyConfig config = WebAssemblyConfig.builder()
+                .engineConfig(ChicoryConfig.builder()
+                        .executionMode(ChicoryConfig.ExecutionMode.COMPILE)
+                        .build())
+                .build();
+
+        try (Engine engine = ChicoryEngineAdapter.create(config);
              Module module = engine.loadModule(IMPORT_MODULE)) {
             DefaultLinkingContext ctx = DefaultLinkingContext.builder()
                     .addHostFunction("env", "add_offset",

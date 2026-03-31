@@ -34,16 +34,19 @@ import java.util.Map;
 final class ChicoryModuleAdapter implements Module {
 
     private final WasmModule wasmModule;
+    private final java.util.function.Function<WasmModule, com.dylibso.chicory.runtime.Instance.Builder> builderFactory;
 
-    ChicoryModuleAdapter(WasmModule wasmModule) {
+    ChicoryModuleAdapter(WasmModule wasmModule,
+                         java.util.function.Function<WasmModule, com.dylibso.chicory.runtime.Instance.Builder> builderFactory) {
         this.wasmModule = wasmModule;
+        this.builderFactory = builderFactory;
     }
 
     @Override
     public Instance instantiate() {
         try {
             com.dylibso.chicory.runtime.Instance nativeInstance =
-                    com.dylibso.chicory.runtime.Instance.builder(wasmModule).build();
+                    builderFactory.apply(wasmModule).build();
             return new ChicoryInstanceAdapter(nativeInstance);
         } catch (Exception e) {
             throw new InstantiationException(
@@ -113,7 +116,7 @@ final class ChicoryModuleAdapter implements Module {
             ImportValues imports = importBuilder.build();
 
             com.dylibso.chicory.runtime.Instance nativeInstance =
-                    com.dylibso.chicory.runtime.Instance.builder(wasmModule)
+                    builderFactory.apply(wasmModule)
                             .withImportValues(imports)
                             .build();
             return new ChicoryInstanceAdapter(nativeInstance);
