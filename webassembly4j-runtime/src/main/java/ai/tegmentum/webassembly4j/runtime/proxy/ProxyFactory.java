@@ -53,7 +53,7 @@ public final class ProxyFactory {
                 handler);
     }
 
-    private static List<WasmBindingProvider> getBindingProviders() {
+    static List<WasmBindingProvider> getBindingProviders() {
         List<WasmBindingProvider> providers = cachedBindingProviders;
         if (providers == null) {
             providers = discoverBindingProviders();

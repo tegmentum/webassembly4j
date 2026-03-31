@@ -1,5 +1,7 @@
 package ai.tegmentum.webassembly4j.runtime;
 
+import ai.tegmentum.webassembly4j.api.Component;
+import ai.tegmentum.webassembly4j.api.ComponentInstance;
 import ai.tegmentum.webassembly4j.api.DefaultLinkingContext;
 import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.HostFunctionDefinition;
@@ -8,6 +10,9 @@ import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.WebAssembly;
 import ai.tegmentum.webassembly4j.api.WebAssemblyBuilder;
 import ai.tegmentum.webassembly4j.api.config.EngineConfig;
+import ai.tegmentum.webassembly4j.runtime.component.ComponentLowerer;
+import ai.tegmentum.webassembly4j.runtime.component.WasmBinaryInfo;
+import ai.tegmentum.webassembly4j.runtime.proxy.ComponentProxyFactory;
 import ai.tegmentum.webassembly4j.runtime.proxy.HostFunctionScanner;
 import ai.tegmentum.webassembly4j.runtime.proxy.ProxyFactory;
 
@@ -43,6 +48,9 @@ public final class WasmRuntimeBuilder {
     public <T extends AutoCloseable> T load(Class<T> iface, byte[] wasmBytes) {
         Engine engine = buildEngine();
         try {
+            if (WasmBinaryInfo.isComponent(wasmBytes)) {
+                return loadComponent(iface, engine, wasmBytes);
+            }
             ai.tegmentum.webassembly4j.api.Module module = engine.loadModule(wasmBytes);
             LinkingContext ctx = buildLinkingContext();
             Instance instance = ctx != null
@@ -51,6 +59,22 @@ public final class WasmRuntimeBuilder {
         } catch (Exception e) {
             engine.close();
             throw e;
+        }
+    }
+
+    private <T extends AutoCloseable> T loadComponent(Class<T> iface, Engine engine,
+                                                       byte[] componentBytes) {
+        if (engine.capabilities().supportsComponents()) {
+            Component component = engine.loadComponent(componentBytes);
+            ComponentInstance instance = component.instantiate();
+            return ComponentProxyFactory.create(iface, engine, component, instance);
+        } else {
+            byte[] coreBytes = ComponentLowerer.lower(componentBytes);
+            ai.tegmentum.webassembly4j.api.Module module = engine.loadModule(coreBytes);
+            LinkingContext ctx = buildLinkingContext();
+            Instance instance = ctx != null
+                    ? module.instantiate(ctx) : module.instantiate();
+            return ProxyFactory.create(iface, engine, module, instance);
         }
     }
 

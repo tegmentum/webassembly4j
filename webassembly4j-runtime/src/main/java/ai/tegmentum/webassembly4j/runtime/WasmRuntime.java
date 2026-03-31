@@ -1,5 +1,7 @@
 package ai.tegmentum.webassembly4j.runtime;
 
+import ai.tegmentum.webassembly4j.api.Component;
+import ai.tegmentum.webassembly4j.api.ComponentInstance;
 import ai.tegmentum.webassembly4j.api.DefaultLinkingContext;
 import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.Function;
@@ -7,6 +9,9 @@ import ai.tegmentum.webassembly4j.api.HostFunctionDefinition;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.WebAssembly;
+import ai.tegmentum.webassembly4j.runtime.component.ComponentLowerer;
+import ai.tegmentum.webassembly4j.runtime.component.WasmBinaryInfo;
+import ai.tegmentum.webassembly4j.runtime.proxy.ComponentProxyFactory;
 import ai.tegmentum.webassembly4j.runtime.proxy.HostFunctionScanner;
 import ai.tegmentum.webassembly4j.runtime.proxy.ProxyFactory;
 
@@ -20,6 +25,9 @@ public final class WasmRuntime {
     public static <T extends AutoCloseable> T load(Class<T> iface, byte[] wasmBytes) {
         Engine engine = WebAssembly.builder().build();
         try {
+            if (WasmBinaryInfo.isComponent(wasmBytes)) {
+                return loadComponent(iface, engine, wasmBytes);
+            }
             ai.tegmentum.webassembly4j.api.Module module = engine.loadModule(wasmBytes);
             Instance instance = module.instantiate();
             return ProxyFactory.create(iface, engine, module, instance);
@@ -33,6 +41,9 @@ public final class WasmRuntime {
                                                     Object... hostObjects) {
         Engine engine = WebAssembly.builder().build();
         try {
+            if (WasmBinaryInfo.isComponent(wasmBytes)) {
+                return loadComponent(iface, engine, wasmBytes);
+            }
             ai.tegmentum.webassembly4j.api.Module module = engine.loadModule(wasmBytes);
             LinkingContext ctx = buildLinkingContext(hostObjects);
             Instance instance = ctx != null
@@ -93,6 +104,22 @@ public final class WasmRuntime {
 
     public static WasmRuntimeBuilder builder() {
         return new WasmRuntimeBuilder();
+    }
+
+    private static <T extends AutoCloseable> T loadComponent(Class<T> iface, Engine engine,
+                                                              byte[] componentBytes) {
+        if (engine.capabilities().supportsComponents()) {
+            // Path A: native component model (e.g. wasmtime)
+            Component component = engine.loadComponent(componentBytes);
+            ComponentInstance instance = component.instantiate();
+            return ComponentProxyFactory.create(iface, engine, component, instance);
+        } else {
+            // Path B: lower to core module via wasm-tools, use existing proxy path
+            byte[] coreBytes = ComponentLowerer.lower(componentBytes);
+            ai.tegmentum.webassembly4j.api.Module module = engine.loadModule(coreBytes);
+            Instance instance = module.instantiate();
+            return ProxyFactory.create(iface, engine, module, instance);
+        }
     }
 
     private static LinkingContext buildLinkingContext(Object[] hostObjects) {
