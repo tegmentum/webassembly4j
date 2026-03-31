@@ -1,6 +1,7 @@
 package ai.tegmentum.webassembly4j.benchmarks;
 
 import ai.tegmentum.webassembly4j.api.config.EngineConfig;
+import ai.tegmentum.webassembly4j.provider.chicory.config.ChicoryConfig;
 import ai.tegmentum.webassembly4j.provider.wamr.config.WamrConfig;
 import ai.tegmentum.webassembly4j.provider.wamr.config.WamrRunningMode;
 
@@ -27,7 +28,10 @@ public enum EngineVariant {
     WAMR_LLVM_JIT_PANAMA("wamr", "wamr4j.runtime", "panama",
             () -> WamrConfig.builder().runningMode(WamrRunningMode.LLVM_JIT).build(), JdkAffinity.STANDARD),
     GRAALWASM("graalwasm", null, null, null, JdkAffinity.GRAALVM),
-    CHICORY("chicory", null, null, null, JdkAffinity.ANY);
+    CHICORY("chicory", null, null, null, JdkAffinity.ANY),
+    CHICORY_COMPILED("chicory", null, null,
+            () -> ChicoryConfig.builder().executionMode(ChicoryConfig.ExecutionMode.COMPILE).build(),
+            JdkAffinity.ANY);
 
     public enum JdkAffinity {
         /** Native runtimes - run on standard JDK only. */

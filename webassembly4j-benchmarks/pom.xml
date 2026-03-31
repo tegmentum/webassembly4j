@@ -103,6 +103,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Chicory Compiler (for CHICORY_COMPILED variant) -->
+        <dependency>
+            <groupId>com.dylibso.chicory</groupId>
+            <artifactId>compiler</artifactId>
+        </dependency>
+
         <!-- JMH Dependencies -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
