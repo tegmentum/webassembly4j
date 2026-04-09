@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.0
+
+### New Features
+
+- **Component model support** in `webassembly4j-runtime`: `WasmRuntime.load()` detects component binaries and routes them to either a native component API (Path A, wasmtime) or a pure-Java component lowerer (Path B) that extracts the embedded core module for non-native providers (Chicory, WAMR, GraalWasm).
+- **Pure Java component lowerer**: `ComponentLowerer` parses the WebAssembly component binary format in-process (LEB128 section walking), eliminating any shell-out to `wasm-tools` for the lowering step.
+- **Chicory runtime compilation**: `ChicoryConfig` exposes an `ExecutionMode.COMPILE` option that AOT-compiles WASM modules to JVM bytecode at load time, delivering large throughput improvements over the interpreter (invokeSimpleAdd: ~116M ops/s vs ~12.6M ops/s interpreted on the benchmark suite).
+- **`CHICORY_COMPILED` benchmark variant**: new JMH parameter covering the Chicory compiler across all benchmark classes, bringing the matrix to nine engine variants.
+- **`ComponentInvocationHandler` / `ComponentProxyFactory`**: reflection proxy path for invoking component exports without Canonical ABI marshalling (native component API handles WIT type conversion).
+- **`WasmBindingProvider` component hooks**: `supportsComponentBinding()` and `createFromComponent()` default methods let generated bindings opt in to the component path.
+
+### Dependency Upgrades
+
+- wasmtime4j: 43.0.0-1.1.0 to 43.0.0-1.1.1
+
+### Bug Fixes
+
+- `ChicoryProvider.supports(EngineConfig)` now correctly accepts `ChicoryConfig` instead of rejecting all engine configs, which was blocking the `CHICORY_COMPILED` benchmark variant from being selected via the SPI.
+
 ## 1.1.0
 
 ### New Features
