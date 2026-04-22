@@ -12,12 +12,12 @@ Add the API and a provider to your project:
 <dependency>
     <groupId>ai.tegmentum.webassembly4j</groupId>
     <artifactId>webassembly4j-runtime</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
 </dependency>
 <dependency>
     <groupId>ai.tegmentum.webassembly4j</groupId>
     <artifactId>wasmtime4j-provider</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
 </dependency>
 ```
 
@@ -241,7 +241,7 @@ Add `webassembly4j-spring` and a provider to your Spring Boot application:
 <dependency>
     <groupId>ai.tegmentum.webassembly4j</groupId>
     <artifactId>webassembly4j-spring</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
 </dependency>
 ```
 
@@ -262,7 +262,7 @@ Generate Java bindings from WIT (WebAssembly Interface Types) definitions:
 <plugin>
     <groupId>ai.tegmentum.webassembly4j</groupId>
     <artifactId>webassembly4j-bindgen</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
     <executions>
         <execution>
             <goals>
