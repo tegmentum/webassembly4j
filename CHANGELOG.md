@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3
+
+### Dependency Upgrades
+
+- wasmtime4j: 44.0.0-1.1.2 to 44.0.1-1.1.3
+
 ## 1.2.2
 
 ### Dependency Upgrades
