@@ -7,11 +7,10 @@ import ai.tegmentum.webassembly4j.provider.chicory.config.ChicoryConfig;
 import ai.tegmentum.webassembly4j.spi.EngineProvider;
 import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
 import ai.tegmentum.webassembly4j.spi.ProviderDescriptor;
-import ai.tegmentum.webassembly4j.spi.ValidationResult;
-import ai.tegmentum.webassembly4j.spi.internal.DefaultValidationResult;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 public final class ChicoryProvider implements EngineProvider {
@@ -48,13 +47,8 @@ public final class ChicoryProvider implements EngineProvider {
     }
 
     @Override
-    public ValidationResult validate(WebAssemblyConfig config) {
-        return DefaultValidationResult.ok();
-    }
-
-    @Override
-    public boolean supports(EngineConfig engineConfig) {
-        return engineConfig instanceof ChicoryConfig;
+    public Optional<Class<? extends EngineConfig>> configType() {
+        return Optional.of(ChicoryConfig.class);
     }
 
     @Override

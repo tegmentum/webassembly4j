@@ -59,4 +59,9 @@ class WamrProviderTest {
         ValidationResult result = provider.validate(null);
         assertTrue(result.valid());
     }
+
+    @Test
+    void configTypeAdvertisesWamrConfig() {
+        assertEquals(WamrConfig.class, provider.configType().orElse(null));
+    }
 }

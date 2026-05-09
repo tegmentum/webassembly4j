@@ -1,13 +1,10 @@
 package ai.tegmentum.webassembly4j.provider.graalwasm;
 
 import ai.tegmentum.webassembly4j.api.Engine;
-import ai.tegmentum.webassembly4j.api.config.EngineConfig;
 import ai.tegmentum.webassembly4j.api.config.WebAssemblyConfig;
 import ai.tegmentum.webassembly4j.spi.EngineProvider;
 import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
 import ai.tegmentum.webassembly4j.spi.ProviderDescriptor;
-import ai.tegmentum.webassembly4j.spi.ValidationResult;
-import ai.tegmentum.webassembly4j.spi.internal.DefaultValidationResult;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -56,16 +53,6 @@ public final class GraalWasmProvider implements EngineProvider {
                 @Override public String message() { return msg; }
             };
         }
-    }
-
-    @Override
-    public ValidationResult validate(WebAssemblyConfig config) {
-        return DefaultValidationResult.ok();
-    }
-
-    @Override
-    public boolean supports(EngineConfig engineConfig) {
-        return false;
     }
 
     @Override

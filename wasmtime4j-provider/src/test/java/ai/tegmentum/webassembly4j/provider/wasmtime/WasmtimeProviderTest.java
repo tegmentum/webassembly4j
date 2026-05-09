@@ -56,4 +56,9 @@ class WasmtimeProviderTest {
         ValidationResult result = provider.validate(null);
         assertTrue(result.valid());
     }
+
+    @Test
+    void configTypeAdvertisesWasmtimeConfig() {
+        assertEquals(WasmtimeConfig.class, provider.configType().orElse(null));
+    }
 }

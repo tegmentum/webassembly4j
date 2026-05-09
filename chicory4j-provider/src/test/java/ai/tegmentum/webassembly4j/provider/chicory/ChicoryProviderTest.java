@@ -5,6 +5,7 @@ import ai.tegmentum.webassembly4j.api.EngineCapabilities;
 import ai.tegmentum.webassembly4j.api.EngineInfo;
 import ai.tegmentum.webassembly4j.api.config.WebAssemblyConfig;
 import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
+import ai.tegmentum.webassembly4j.provider.chicory.config.ChicoryConfig;
 import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
 import ai.tegmentum.webassembly4j.spi.ProviderDescriptor;
 import org.junit.jupiter.api.Test;
@@ -70,5 +71,10 @@ class ChicoryProviderTest {
             assertThrows(UnsupportedFeatureException.class,
                     () -> engine.loadComponent(new byte[0]));
         }
+    }
+
+    @Test
+    void configTypeAdvertisesChicoryConfig() {
+        assertEquals(ChicoryConfig.class, provider.configType().orElse(null));
     }
 }

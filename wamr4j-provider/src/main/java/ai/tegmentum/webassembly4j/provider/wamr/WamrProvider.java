@@ -7,13 +7,10 @@ import ai.tegmentum.webassembly4j.provider.wamr.config.WamrConfig;
 import ai.tegmentum.webassembly4j.spi.EngineProvider;
 import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
 import ai.tegmentum.webassembly4j.spi.ProviderDescriptor;
-import ai.tegmentum.webassembly4j.spi.ValidationResult;
-import ai.tegmentum.webassembly4j.spi.internal.DefaultValidationResult;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public final class WamrProvider implements EngineProvider {
@@ -61,28 +58,8 @@ public final class WamrProvider implements EngineProvider {
     }
 
     @Override
-    public ValidationResult validate(WebAssemblyConfig config) {
-        if (config == null) {
-            return DefaultValidationResult.ok();
-        }
-        List<String> errors = new ArrayList<>();
-
-        config.engineConfig().ifPresent(ec -> {
-            if (!(ec instanceof WamrConfig)) {
-                errors.add("Engine config must be an instance of WamrConfig, got: "
-                        + ec.getClass().getName());
-            }
-        });
-
-        if (errors.isEmpty()) {
-            return DefaultValidationResult.ok();
-        }
-        return DefaultValidationResult.invalid(errors);
-    }
-
-    @Override
-    public boolean supports(EngineConfig engineConfig) {
-        return engineConfig instanceof WamrConfig;
+    public Optional<Class<? extends EngineConfig>> configType() {
+        return Optional.of(WamrConfig.class);
     }
 
     @Override

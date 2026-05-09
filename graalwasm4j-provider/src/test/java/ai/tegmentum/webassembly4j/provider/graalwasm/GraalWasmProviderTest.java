@@ -40,6 +40,25 @@ class GraalWasmProviderTest {
     }
 
     @Test
+    void configTypeIsEmpty() {
+        assertFalse(provider.configType().isPresent());
+    }
+
+    @Test
+    void supportsRejectsAnyEngineConfig() {
+        assertTrue(provider.supports(null));
+        assertFalse(provider.supports(new ai.tegmentum.webassembly4j.api.config.EngineConfig() {}));
+    }
+
+    @Test
+    void validateRejectsForeignEngineConfig() {
+        WebAssemblyConfig cfg = WebAssemblyConfig.builder()
+                .engineConfig(new ai.tegmentum.webassembly4j.api.config.EngineConfig() {})
+                .build();
+        assertFalse(provider.validate(cfg).valid());
+    }
+
+    @Test
     @EnabledIf("runtimeAvailable")
     void createEngine() {
         try (Engine engine = provider.create(null)) {
