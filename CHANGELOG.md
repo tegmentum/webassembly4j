@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0
+
+### New Features
+
+- **`EngineProvider.configType()` discovery hook**: providers can now advertise which concrete `EngineConfig` subtype they accept. The default `supports()` and `validate()` implementations use it to reject mismatched configs uniformly, replacing duplicated `instanceof` checks across providers. `EngineConfig` is now documented as the marker interface for provider-specific configuration.
+- **Provider-owned config facades**: each provider ships an `XxxConfigs` class (`WasmtimeConfigs`, `WamrConfigs`, `ChicoryConfigs`, `GraalWasmConfigs`) returning a fully-wired `WebAssemblyConfig` without hand-typing the engine ID. The `Consumer<XxxConfig.Builder>` style means new tunables propagate automatically, and each facade pins its `ENGINE_ID` to the provider descriptor via a self-test. Strictly additive on top of the existing marker-interface path.
+
+### Dependency Upgrades
+
+- wasmtime4j: 44.0.1-1.1.3 to 45.0.0-1.1.4
+
 ## 1.2.3
 
 ### Dependency Upgrades
