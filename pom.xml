@@ -62,7 +62,7 @@
 
         <!-- Dependency versions -->
         <junit.version>5.10.4</junit.version>
-        <wasmtime4j.version>45.0.0-1.1.4</wasmtime4j.version>
+        <wasmtime4j.version>45.0.1-1.1.5</wasmtime4j.version>
         <wamr4j.version>2.4.4-1.0.2</wamr4j.version>
         <chicory.version>1.7.3</chicory.version>
         <graalvm.version>24.2.1</graalvm.version>
