@@ -1,0 +1,14 @@
+# Local CI via nektos/act (https://github.com/nektos/act) — run the
+# .github/workflows/ jobs locally without spending GitHub Actions minutes.
+# Useful for fast iteration even after the repo goes public.
+#   act          run the default (push) event
+#   act -l       list workflows/jobs
+#   act -j NAME  run a single job
+#
+# Map the workflow's ubuntu-latest runner to act's "medium" catthehacker image:
+# it ships git, curl, build-essential, node and the common GitHub-runner tooling.
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+# Do not mount the host docker socket into the job container — these workflows
+# need no docker-in-docker, and the mount fails under colima (forwarded socket).
+--container-daemon-socket -
