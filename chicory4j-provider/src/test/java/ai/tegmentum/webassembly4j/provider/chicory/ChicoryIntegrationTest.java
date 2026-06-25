@@ -124,6 +124,21 @@ class ChicoryIntegrationTest {
     }
 
     @Test
+    void memoryGrow() {
+        try (Engine engine = ChicoryEngineAdapter.create(null);
+             Module module = engine.loadModule(MEMORY_MODULE)) {
+            Instance instance = module.instantiate();
+            Memory memory = instance.memory("memory").orElseThrow();
+
+            assertEquals(1, memory.pageCount());
+            long previous = memory.grow(2);
+            assertEquals(1, previous);
+            assertEquals(3, memory.pageCount());
+            assertEquals(3 * Memory.PAGE_SIZE, memory.byteSize());
+        }
+    }
+
+    @Test
     void hostFunctionLinking() {
         try (Engine engine = ChicoryEngineAdapter.create(null);
              Module module = engine.loadModule(IMPORT_MODULE)) {

@@ -35,7 +35,7 @@ final class GraalWasmInstanceAdapter implements Instance {
         if (member == null || !member.hasBufferElements()) {
             return Optional.empty();
         }
-        return Optional.of(new GraalWasmMemoryAdapter(member));
+        return Optional.of(new GraalWasmMemoryAdapter(context, member));
     }
 
     @Override

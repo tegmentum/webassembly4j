@@ -5,7 +5,42 @@ import java.util.Optional;
 
 public interface Memory {
 
+    /** WebAssembly linear-memory page size in bytes (64 KiB). */
+    long PAGE_SIZE = 65536;
+
     long byteSize();
+
+    /**
+     * Returns the current size of this memory in WebAssembly pages (64 KiB each).
+     *
+     * @return the current page count
+     */
+    default long pageCount() {
+        return byteSize() / PAGE_SIZE;
+    }
+
+    /**
+     * Returns the maximum number of pages this memory may grow to, or {@code -1}
+     * if the memory has no declared maximum or the provider cannot report one.
+     *
+     * @return the maximum page count, or {@code -1} if unlimited/unknown
+     */
+    default long maxPageCount() {
+        return -1;
+    }
+
+    /**
+     * Grows this memory by the given number of 64 KiB pages.
+     *
+     * @param pages the number of pages to add
+     * @return the previous size in pages, or {@code -1} if the growth failed
+     *     (e.g. it would exceed the declared maximum)
+     * @throws UnsupportedOperationException if the provider cannot grow memory
+     */
+    default long grow(long pages) {
+        throw new UnsupportedOperationException(
+                "This provider does not support growing linear memory");
+    }
 
     ByteBuffer asByteBuffer();
 

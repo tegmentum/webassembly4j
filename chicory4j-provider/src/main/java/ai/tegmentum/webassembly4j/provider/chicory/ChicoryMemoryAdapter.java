@@ -19,6 +19,21 @@ final class ChicoryMemoryAdapter implements Memory {
     }
 
     @Override
+    public long pageCount() {
+        return nativeMemory.pages();
+    }
+
+    @Override
+    public long maxPageCount() {
+        return nativeMemory.maximumPages();
+    }
+
+    @Override
+    public long grow(long pages) {
+        return nativeMemory.grow((int) pages);
+    }
+
+    @Override
     public ByteBuffer asByteBuffer() {
         throw new UnsupportedOperationException(
                 "Chicory does not expose memory as a direct ByteBuffer");

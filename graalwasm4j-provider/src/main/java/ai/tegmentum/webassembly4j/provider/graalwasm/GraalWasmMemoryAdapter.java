@@ -1,6 +1,8 @@
 package ai.tegmentum.webassembly4j.provider.graalwasm;
 
 import ai.tegmentum.webassembly4j.api.Memory;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 
 import java.nio.ByteBuffer;
@@ -8,15 +10,34 @@ import java.util.Optional;
 
 final class GraalWasmMemoryAdapter implements Memory {
 
+    private final Context context;
     private final Value nativeMemory;
 
-    GraalWasmMemoryAdapter(Value nativeMemory) {
+    GraalWasmMemoryAdapter(Context context, Value nativeMemory) {
+        this.context = context;
         this.nativeMemory = nativeMemory;
     }
 
     @Override
     public long byteSize() {
         return nativeMemory.getBufferSize();
+    }
+
+    @Override
+    public long grow(long pages) {
+        Value webAssembly = context.getPolyglotBindings().getMember("WebAssembly");
+        if (webAssembly == null || !webAssembly.hasMember("mem_grow")) {
+            throw new UnsupportedOperationException(
+                    "GraalWasm context does not expose the WebAssembly bindings; "
+                    + "cannot grow linear memory");
+        }
+        try {
+            return webAssembly.getMember("mem_grow")
+                    .execute(nativeMemory, (int) pages).asLong();
+        } catch (PolyglotException e) {
+            // mem_grow raises a RangeError when growth exceeds the declared limit.
+            return -1;
+        }
     }
 
     @Override

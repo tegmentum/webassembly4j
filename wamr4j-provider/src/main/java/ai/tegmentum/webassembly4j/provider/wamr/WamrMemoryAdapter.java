@@ -20,6 +20,21 @@ final class WamrMemoryAdapter implements Memory {
     }
 
     @Override
+    public long pageCount() {
+        return nativeMemory.pageCount();
+    }
+
+    @Override
+    public long maxPageCount() {
+        return nativeMemory.maxPageCount();
+    }
+
+    @Override
+    public long grow(long pages) {
+        return nativeMemory.grow((int) pages);
+    }
+
+    @Override
     public ByteBuffer asByteBuffer() {
         return nativeMemory.asByteBuffer();
     }

@@ -162,6 +162,26 @@ class WamrIntegrationTest {
 
     @Test
     @EnabledIf("runtimeAvailable")
+    void memoryGrow() {
+        try (Engine engine = WamrEngineAdapter.create(null)) {
+            try (Module module = engine.loadModule(MEMORY_MODULE)) {
+                Instance instance = module.instantiate();
+                Memory memory = instance.memory("memory").orElseThrow();
+
+                // WAMR appends a default app heap to linear memory, so the absolute
+                // page count is larger than the module's declared minimum. Assert the
+                // relative effect of grow rather than absolute page numbers.
+                long before = memory.pageCount();
+                long previous = memory.grow(2);
+                assertEquals(before, previous);
+                assertEquals(before + 2, memory.pageCount());
+                assertEquals((before + 2) * Memory.PAGE_SIZE, memory.byteSize());
+            }
+        }
+    }
+
+    @Test
+    @EnabledIf("runtimeAvailable")
     void batchGetGlobals() {
         try (Engine engine = WamrEngineAdapter.create(null)) {
             try (Module module = engine.loadModule(GLOBALS_MODULE)) {

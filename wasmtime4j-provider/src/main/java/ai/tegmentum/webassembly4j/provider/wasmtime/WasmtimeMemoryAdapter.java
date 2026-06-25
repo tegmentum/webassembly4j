@@ -22,6 +22,21 @@ final class WasmtimeMemoryAdapter implements Memory {
     }
 
     @Override
+    public long pageCount() {
+        return nativeMemory.getSize();
+    }
+
+    @Override
+    public long maxPageCount() {
+        return nativeMemory.getMaxSize();
+    }
+
+    @Override
+    public long grow(long pages) {
+        return nativeMemory.grow((int) pages);
+    }
+
+    @Override
     public ByteBuffer asByteBuffer() {
         return nativeMemory.getBuffer();
     }
