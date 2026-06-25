@@ -126,6 +126,32 @@ Engine engine = WebAssembly.builder()
     .build();
 ```
 
+### Native backend: JNI vs Panama
+
+The `wasmtime4j-provider` and `wamr4j-provider` bundle the **JNI** native runtime by default, so they work out of the box on every supported Java version with no extra setup.
+
+Both engines also offer a **Panama** (Java FFM) backend. It is **not** bundled because its classes are compiled to Java 22 bytecode, and merely having them on the classpath crashes `ServiceLoader` discovery on older JVMs (`UnsupportedClassVersionError`). To use it, add the artifact yourself — **only on Java 22+**:
+
+```xml
+<!-- Wasmtime: auto-selected on Java 23+, JNI below -->
+<dependency>
+    <groupId>ai.tegmentum</groupId>
+    <artifactId>wasmtime4j-panama</artifactId>
+    <version>46.0.1-1.1.7</version>
+    <scope>runtime</scope>
+</dependency>
+
+<!-- WAMR: auto-selected on Java 23+ -->
+<dependency>
+    <groupId>ai.tegmentum.wamr4j</groupId>
+    <artifactId>wamr4j-panama</artifactId>
+    <version>2.4.4-1.0.2</version>
+    <scope>runtime</scope>
+</dependency>
+```
+
+The engine's runtime factory then selects Panama automatically based on the running Java version (keep the bundled JNI as the fallback). To force a backend explicitly, set `-Dwasmtime4j.runtime=panama` / `-Dwamr4j.runtime=Panama` (or `jni`). On recent JDKs, add `--enable-native-access=ALL-UNNAMED` to silence FFM warnings.
+
 ## WasmGC Object Bridge
 
 For languages that compile to WasmGC (Kotlin/Wasm, Dart, OCaml, Java via J2Wasm), the GC bridge provides automatic marshalling between Java objects and WebAssembly GC struct instances -- no linear memory management needed.
