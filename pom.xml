@@ -97,8 +97,28 @@
                 <version>${wasmtime4j.version}</version>
             </dependency>
             <dependency>
+                <groupId>ai.tegmentum</groupId>
+                <artifactId>wasmtime4j-jni</artifactId>
+                <version>${wasmtime4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum</groupId>
+                <artifactId>wasmtime4j-panama</artifactId>
+                <version>${wasmtime4j.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>ai.tegmentum.wamr4j</groupId>
                 <artifactId>wamr4j</artifactId>
+                <version>${wamr4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.wamr4j</groupId>
+                <artifactId>wamr4j-jni</artifactId>
+                <version>${wamr4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.wamr4j</groupId>
+                <artifactId>wamr4j-panama</artifactId>
                 <version>${wamr4j.version}</version>
             </dependency>
             <dependency>

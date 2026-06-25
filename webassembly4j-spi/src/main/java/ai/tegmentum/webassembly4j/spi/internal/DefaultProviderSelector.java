@@ -1,6 +1,7 @@
 package ai.tegmentum.webassembly4j.spi.internal;
 
 import ai.tegmentum.webassembly4j.spi.EngineProvider;
+import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
 import ai.tegmentum.webassembly4j.spi.ProviderContext;
 import ai.tegmentum.webassembly4j.spi.ProviderSelectionResult;
 import ai.tegmentum.webassembly4j.spi.ProviderSelector;
@@ -28,16 +29,40 @@ public final class DefaultProviderSelector implements ProviderSelector {
         boolean filterByConfig = context.config() != null
                 && context.config().engineConfig().isPresent();
 
-        // Single pass: filter + track highest priority candidates
+        // Single pass: filter + track highest priority candidates. Collect a
+        // human-readable reason for every rejected provider so that a failed
+        // selection can explain *why* each candidate was excluded.
         int maxPriority = Integer.MIN_VALUE;
         List<EngineProvider> topCandidates = new ArrayList<>();
+        List<String> rejections = new ArrayList<>();
 
         for (EngineProvider p : providers) {
-            if (!p.availability().available()) continue;
-            if (filterByProvider && !requestedProviderId.equals(p.descriptor().providerId())) continue;
-            if (filterByEngine && !requestedEngineId.equals(p.descriptor().engineId())) continue;
-            if (p.descriptor().minimumJavaVersion() > javaVersion) continue;
-            if (filterByConfig && !p.supports(context.config().engineConfig().get())) continue;
+            String id = p.descriptor().providerId();
+
+            ProviderAvailability availability = p.availability();
+            if (!availability.available()) {
+                rejections.add(id + ": " + availability.message());
+                continue;
+            }
+            if (filterByProvider && !requestedProviderId.equals(p.descriptor().providerId())) {
+                rejections.add(id + ": provider id does not match requested '"
+                        + requestedProviderId + "'");
+                continue;
+            }
+            if (filterByEngine && !requestedEngineId.equals(p.descriptor().engineId())) {
+                rejections.add(id + ": engine id '" + p.descriptor().engineId()
+                        + "' does not match requested '" + requestedEngineId + "'");
+                continue;
+            }
+            if (p.descriptor().minimumJavaVersion() > javaVersion) {
+                rejections.add(id + ": requires Java " + p.descriptor().minimumJavaVersion()
+                        + " but running on Java " + javaVersion);
+                continue;
+            }
+            if (filterByConfig && !p.supports(context.config().engineConfig().get())) {
+                rejections.add(id + ": does not support the supplied engine configuration");
+                continue;
+            }
 
             int priority = p.descriptor().priority();
             if (priority > maxPriority) {
@@ -50,10 +75,15 @@ public final class DefaultProviderSelector implements ProviderSelector {
         }
 
         if (topCandidates.isEmpty()) {
-            return result(null, "No compatible provider found for"
-                    + (filterByEngine ? " engine=" + requestedEngineId : "")
-                    + (filterByProvider ? " provider=" + requestedProviderId : "")
-                    + " on Java " + javaVersion);
+            StringBuilder explanation = new StringBuilder("No compatible provider found for");
+            if (filterByEngine) explanation.append(" engine=").append(requestedEngineId);
+            if (filterByProvider) explanation.append(" provider=").append(requestedProviderId);
+            explanation.append(" on Java ").append(javaVersion);
+            if (!rejections.isEmpty()) {
+                explanation.append(". Providers considered: ")
+                        .append(String.join("; ", rejections));
+            }
+            return result(null, explanation.toString());
         }
 
         if (topCandidates.size() > 1) {

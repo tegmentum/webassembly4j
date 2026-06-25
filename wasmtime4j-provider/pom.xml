@@ -26,29 +26,22 @@
             <groupId>ai.tegmentum</groupId>
             <artifactId>wasmtime4j</artifactId>
         </dependency>
+        <!--
+            Bundle the JNI native runtime so the provider works out of the box
+            on any supported Java version (11+). Users on Java 23+ who prefer the
+            Panama (FFM) backend can add ai.tegmentum:wasmtime4j-panama themselves;
+            it is intentionally not bundled because its classes are Java 22 bytecode
+            and would break ServiceLoader-based extension points on older JVMs.
+        -->
+        <dependency>
+            <groupId>ai.tegmentum</groupId>
+            <artifactId>wasmtime4j-jni</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <profile>
-            <id>native-tests</id>
-            <activation>
-                <property>
-                    <name>!skipNativeTests</name>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>ai.tegmentum</groupId>
-                    <artifactId>wasmtime4j-jni</artifactId>
-                    <version>${wasmtime4j.version}</version>
-                    <scope>test</scope>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
 </project>

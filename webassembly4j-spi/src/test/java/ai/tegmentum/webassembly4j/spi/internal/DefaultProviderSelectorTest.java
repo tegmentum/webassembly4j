@@ -52,6 +52,21 @@ class DefaultProviderSelectorTest {
     }
 
     @Test
+    void explainsWhyEachProviderWasRejected() {
+        EngineProvider unavailable = stubProvider("wasmtime", "wasmtime-ffm", 200, 11, false);
+        EngineProvider tooNew = stubProvider("graalwasm", "graalwasm", 150, 17, true);
+        ProviderContext ctx = contextWithJava(11, null, null);
+
+        ProviderSelectionResult result = selector.select(
+                Arrays.asList(unavailable, tooNew), ctx);
+
+        assertFalse(result.selectedProvider().isPresent());
+        String explanation = result.explanation();
+        assertTrue(explanation.contains("wasmtime-ffm: Unavailable"), explanation);
+        assertTrue(explanation.contains("graalwasm: requires Java 17"), explanation);
+    }
+
+    @Test
     void filtersByEngineId() {
         EngineProvider wasmtime = stubProvider("wasmtime", "wasmtime-ffm", 200, 11, true);
         EngineProvider chicory = stubProvider("chicory", "chicory", 200, 11, true);

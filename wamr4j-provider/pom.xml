@@ -32,29 +32,24 @@
             <groupId>ai.tegmentum.wamr4j</groupId>
             <artifactId>wamr4j</artifactId>
         </dependency>
+        <!--
+            Bundle the JNI native runtime so the provider works out of the box on
+            any supported Java version (17+). The Panama (FFM) backend is NOT
+            bundled: wamr4j discovers runtimes via ServiceLoader and its Panama
+            provider is Java 22 bytecode, so its mere presence on a Java 17-21
+            classpath would raise a ServiceConfigurationError and break discovery
+            of all runtimes (including JNI). Users on Java 22+ who want Panama can
+            add ai.tegmentum.wamr4j:wamr4j-panama themselves.
+        -->
+        <dependency>
+            <groupId>ai.tegmentum.wamr4j</groupId>
+            <artifactId>wamr4j-jni</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <profile>
-            <id>native-tests</id>
-            <activation>
-                <property>
-                    <name>!skipNativeTests</name>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>ai.tegmentum.wamr4j</groupId>
-                    <artifactId>wamr4j-jni</artifactId>
-                    <version>${wamr4j.version}</version>
-                    <scope>test</scope>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
 </project>
