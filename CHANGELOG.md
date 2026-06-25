@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.0
+
+### New Features
+
+- **Linear memory `grow()`**: the `Memory` API now exposes `grow(long pages)`, `pageCount()`, and `maxPageCount()` as default methods, implemented across all four providers. Wasmtime, WAMR, and Chicory grow through their native memory handles; GraalWasm grows through the exported `WebAssembly.mem_grow` executable. Resolves #4.
+
+### Bug Fixes
+
+- **Provider selection now explains failures**: a failed provider selection previously reported only `No compatible provider found ... on Java N`, hiding the real cause. It now lists why each candidate was rejected (e.g. the native library failed to load, or the minimum Java version was not met). Resolves #3.
+- **Native runtime bundled by default**: the Wasmtime and WAMR providers now depend on their JNI native runtime at `runtime` scope, so they work out of the box instead of failing with no compatible provider. The Panama backend remains an opt-in dependency.
+
+### Dependency Upgrades
+
+- wasmtime4j: 45.0.2-1.1.6 to 46.0.1-1.1.7
+
 ## 1.3.2
 
 ### Dependency Upgrades
