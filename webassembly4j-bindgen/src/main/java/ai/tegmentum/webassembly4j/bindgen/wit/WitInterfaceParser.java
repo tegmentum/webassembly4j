@@ -61,6 +61,24 @@ public final class WitInterfaceParser {
   private static final Pattern FLAGS_PATTERN =
       Pattern.compile("flags\\s*\\{([\\s\\S]*)\\}", Pattern.DOTALL);
 
+  // Standalone declarations: `record name { fields }` etc. — the
+  // canonical WIT syntax used by wit-bindgen output and most
+  // real-world WIT files. The `type X = ...` alias forms above are
+  // also valid but less common in practice. Non-greedy braces are
+  // safe because records/variants/enums/flags don't nest braces in
+  // their bodies.
+  private static final Pattern RECORD_DECLARATION_PATTERN =
+      Pattern.compile("record\\s+([a-zA-Z0-9_-]+)\\s*\\{([\\s\\S]*?)\\}", Pattern.DOTALL);
+
+  private static final Pattern VARIANT_DECLARATION_PATTERN =
+      Pattern.compile("variant\\s+([a-zA-Z0-9_-]+)\\s*\\{([\\s\\S]*?)\\}", Pattern.DOTALL);
+
+  private static final Pattern ENUM_DECLARATION_PATTERN =
+      Pattern.compile("enum\\s+([a-zA-Z0-9_-]+)\\s*\\{([\\s\\S]*?)\\}", Pattern.DOTALL);
+
+  private static final Pattern FLAGS_DECLARATION_PATTERN =
+      Pattern.compile("flags\\s+([a-zA-Z0-9_-]+)\\s*\\{([\\s\\S]*?)\\}", Pattern.DOTALL);
+
   private static final int MAX_WIT_TEXT_LENGTH = 1024 * 1024; // 1MB limit
 
   private final Map<String, WitType> typeCache;
@@ -129,6 +147,34 @@ public final class WitInterfaceParser {
    */
   private Map<String, WitType> parseTypes(final String interfaceBody) throws BindgenException {
     final Map<String, WitType> types = new HashMap<>();
+
+    // Pass 1: standalone declarations (`record name { ... }`,
+    // `variant name { ... }`, `enum name { ... }`,
+    // `flags name { ... }`). This is the canonical WIT syntax —
+    // running it first lets the second pass resolve aliases that
+    // reference them.
+    collectStandalone(
+        RECORD_DECLARATION_PATTERN,
+        interfaceBody,
+        types,
+        (name, body) -> parseRecordType(name, body));
+    collectStandalone(
+        VARIANT_DECLARATION_PATTERN,
+        interfaceBody,
+        types,
+        (name, body) -> parseVariantType(name, body));
+    collectStandalone(
+        ENUM_DECLARATION_PATTERN,
+        interfaceBody,
+        types,
+        (name, body) -> parseEnumType(name, body));
+    collectStandalone(
+        FLAGS_DECLARATION_PATTERN,
+        interfaceBody,
+        types,
+        (name, body) -> parseFlagsType(name, body));
+
+    // Pass 2: `type X = ...;` alias declarations.
     final Matcher typeMatcher = TYPE_PATTERN.matcher(interfaceBody);
 
     while (typeMatcher.find()) {
@@ -141,6 +187,38 @@ public final class WitInterfaceParser {
     }
 
     return types;
+  }
+
+  /**
+   * Functional interface for parsing a standalone declaration's body. Matches the
+   * {@code parseRecordType} / {@code parseVariantType} / {@code parseEnumType} /
+   * {@code parseFlagsType} signatures so they compose with {@link
+   * #collectStandalone(Pattern, String, Map, StandaloneBodyParser)}.
+   */
+  @FunctionalInterface
+  private interface StandaloneBodyParser {
+    WitType parse(String typeName, String body) throws BindgenException;
+  }
+
+  /**
+   * Run a standalone-declaration pattern (e.g. {@code record name { fields }}) across
+   * the interface body and register every match into {@code types} and the resolution
+   * cache.
+   */
+  private void collectStandalone(
+      final Pattern pattern,
+      final String interfaceBody,
+      final Map<String, WitType> types,
+      final StandaloneBodyParser bodyParser)
+      throws BindgenException {
+    final Matcher m = pattern.matcher(interfaceBody);
+    while (m.find()) {
+      final String typeName = m.group(1);
+      final String body = m.group(2);
+      final WitType witType = bodyParser.parse(typeName, body);
+      types.put(typeName, witType);
+      typeCache.put(typeName, witType);
+    }
   }
 
   /**
@@ -225,7 +303,7 @@ public final class WitInterfaceParser {
   private WitType parseRecordType(final String typeName, final String fieldsText)
       throws BindgenException {
     final Map<String, WitType> fields = new HashMap<>();
-    final String[] fieldDefs = fieldsText.split(",");
+    final List<String> fieldDefs = splitTopLevel(stripComments(fieldsText), ',');
 
     for (final String fieldDef : fieldDefs) {
       final String trimmed = fieldDef.trim();
@@ -233,18 +311,100 @@ public final class WitInterfaceParser {
         continue;
       }
 
-      final String[] parts = trimmed.split(":");
-      if (parts.length != 2) {
+      // Split on the FIRST colon — type expressions like
+      // `list<u32>` don't contain colons but type aliases that
+      // resolve to records aren't allowed inline either, so the
+      // first `:` is the field/type separator.
+      final int colon = trimmed.indexOf(':');
+      if (colon < 0) {
         throw new BindgenException("Invalid record field definition: " + fieldDef);
       }
-
-      final String fieldName = parts[0].trim();
-      final String fieldTypeName = parts[1].trim();
+      final String fieldName = trimmed.substring(0, colon).trim();
+      final String fieldTypeName = trimmed.substring(colon + 1).trim();
       final WitType fieldType = resolveType(fieldTypeName);
       fields.put(fieldName, fieldType);
     }
 
     return WitType.record(typeName, fields);
+  }
+
+  /**
+   * Strip WIT doc-comment lines ({@code ///…}) and plain {@code //…} comments
+   * from declaration bodies. Mutating the body before field/case splitting avoids
+   * comma-inside-comment surprises.
+   */
+  private static String stripComments(final String body) {
+    final StringBuilder out = new StringBuilder(body.length());
+    for (final String line : body.split("\n", -1)) {
+      final int commentStart = indexOfLineComment(line);
+      if (commentStart < 0) {
+        out.append(line).append('\n');
+      } else {
+        out.append(line, 0, commentStart).append('\n');
+      }
+    }
+    return out.toString();
+  }
+
+  /**
+   * Find the first {@code //} that starts a WIT line comment, respecting
+   * "…" strings so a {@code //} inside a string literal isn't misread.
+   */
+  private static int indexOfLineComment(final String line) {
+    boolean inString = false;
+    for (int i = 0; i < line.length() - 1; i++) {
+      final char c = line.charAt(i);
+      if (c == '"' && (i == 0 || line.charAt(i - 1) != '\\')) {
+        inString = !inString;
+        continue;
+      }
+      if (!inString && c == '/' && line.charAt(i + 1) == '/') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Split {@code text} on top-level occurrences of {@code separator}, respecting
+   * angle-bracket nesting ({@code list<u32, u32>}), paren nesting
+   * ({@code case(payload)}), and double-quoted strings.
+   */
+  private static List<String> splitTopLevel(final String text, final char separator) {
+    final List<String> out = new ArrayList<>();
+    int depthAngle = 0;
+    int depthParen = 0;
+    boolean inString = false;
+    final StringBuilder current = new StringBuilder();
+    for (int i = 0; i < text.length(); i++) {
+      final char c = text.charAt(i);
+      if (c == '"' && (i == 0 || text.charAt(i - 1) != '\\')) {
+        inString = !inString;
+        current.append(c);
+        continue;
+      }
+      if (!inString) {
+        if (c == '<') {
+          depthAngle++;
+        } else if (c == '>') {
+          depthAngle = Math.max(0, depthAngle - 1);
+        } else if (c == '(') {
+          depthParen++;
+        } else if (c == ')') {
+          depthParen = Math.max(0, depthParen - 1);
+        }
+      }
+      if (!inString && depthAngle == 0 && depthParen == 0 && c == separator) {
+        out.add(current.toString());
+        current.setLength(0);
+      } else {
+        current.append(c);
+      }
+    }
+    if (current.length() > 0) {
+      out.add(current.toString());
+    }
+    return out;
   }
 
   /**
@@ -258,7 +418,7 @@ public final class WitInterfaceParser {
   private WitType parseVariantType(final String typeName, final String casesText)
       throws BindgenException {
     final Map<String, Optional<WitType>> cases = new HashMap<>();
-    final String[] caseDefs = casesText.split(",");
+    final List<String> caseDefs = splitTopLevel(stripComments(casesText), ',');
 
     for (final String caseDef : caseDefs) {
       final String trimmed = caseDef.trim();
@@ -294,7 +454,7 @@ public final class WitInterfaceParser {
   private WitType parseEnumType(final String typeName, final String valuesText)
       throws BindgenException {
     final List<String> values = new ArrayList<>();
-    final String[] valueDefs = valuesText.split(",");
+    final List<String> valueDefs = splitTopLevel(stripComments(valuesText), ',');
 
     for (final String valueDef : valueDefs) {
       final String trimmed = valueDef.trim();
@@ -317,7 +477,7 @@ public final class WitInterfaceParser {
   private WitType parseFlagsType(final String typeName, final String flagsText)
       throws BindgenException {
     final List<String> flags = new ArrayList<>();
-    final String[] flagDefs = flagsText.split(",");
+    final List<String> flagDefs = splitTopLevel(stripComments(flagsText), ',');
 
     for (final String flagDef : flagDefs) {
       final String trimmed = flagDef.trim();
