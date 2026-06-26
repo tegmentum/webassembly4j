@@ -308,11 +308,41 @@ public final class CodeGenerator {
             .documentation(witType.getDocumentation().orElse(null));
 
     for (Map.Entry<String, WitType> field : witType.getKind().getRecordFields().entrySet()) {
-      final BindgenType fieldType = convertWitType(field.getKey(), field.getValue());
+      final WitType fieldWit = field.getValue();
+      // A record field can reference a previously-declared named
+      // compound type (record / variant / enum / flags). For those
+      // we emit a REFERENCE so the generator picks up the existing
+      // declaration; previously every nested call passed the
+      // FIELD name to convertWitType, so a `start-position:
+      // position` field generated a synthetic `StartPosition`
+      // Java type that never existed.
+      final BindgenType fieldType;
+      if (isNamedCompound(fieldWit)) {
+        fieldType = BindgenType.reference(fieldWit.getName());
+      } else {
+        fieldType = convertWitType(fieldWit.getName(), fieldWit);
+      }
       builder.addField(new BindgenField(field.getKey(), fieldType));
     }
 
     return builder.build();
+  }
+
+  /**
+   * True when {@code witType} is a top-level named compound (record / variant /
+   * enum / flags). Such types are always declared at the interface scope; a
+   * field, case payload, or list/option element that has one of these
+   * categories is always a reference, never an inline declaration.
+   */
+  private static boolean isNamedCompound(final WitType witType) {
+    if (witType.getName() == null || witType.getName().isEmpty()) {
+      return false;
+    }
+    final WitTypeCategory cat = witType.getKind().getCategory();
+    return cat == WitTypeCategory.RECORD
+        || cat == WitTypeCategory.VARIANT
+        || cat == WitTypeCategory.ENUM
+        || cat == WitTypeCategory.FLAGS;
   }
 
   /**
