@@ -65,19 +65,19 @@
         <junit.version>5.10.4</junit.version>
         <wasmtime4j.version>46.0.1-1.1.7</wasmtime4j.version>
         <wamr4j.version>2.4.4-1.0.2</wamr4j.version>
-        <chicory.version>1.7.3</chicory.version>
+        <chicory.version>1.7.5</chicory.version>
         <graalvm.version>24.2.1</graalvm.version>
         <jmh.version>1.37</jmh.version>
-        <jackson.version>2.15.2</jackson.version>
+        <jackson.version>2.22.0</jackson.version>
         <spring-boot.version>3.2.5</spring-boot.version>
 
         <!-- Plugin versions -->
-        <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
-        <maven-jar-plugin.version>3.3.0</maven-jar-plugin.version>
-        <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
-        <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
-        <flatten-maven-plugin.version>1.6.0</flatten-maven-plugin.version>
+        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
+        <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -304,7 +304,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.1.0</version>
+                        <version>3.2.8</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
