@@ -42,6 +42,7 @@
         <module>webassembly4j-spi</module>
         <module>wasmtime4j-provider</module>
         <module>wamr4j-provider</module>
+        <module>wasm3-provider</module>
         <module>chicory4j-provider</module>
         <module>graalwasm4j-provider</module>
         <module>webassembly4j-runtime</module>
