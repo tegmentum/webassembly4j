@@ -62,7 +62,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- Dependency versions -->
-        <junit.version>5.10.4</junit.version>
+        <junit.version>6.1.0</junit.version>
         <wasmtime4j.version>46.0.1-1.1.7</wasmtime4j.version>
         <wamr4j.version>2.4.4-1.0.2</wamr4j.version>
         <chicory.version>1.7.3</chicory.version>
