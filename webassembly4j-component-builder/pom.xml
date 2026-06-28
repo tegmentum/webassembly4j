@@ -23,13 +23,13 @@
         <maven.compiler.release>17</maven.compiler.release>
 
         <!-- Maven plugin versions -->
-        <maven.version>3.8.1</maven.version>
-        <maven-plugin-api.version>3.8.1</maven-plugin-api.version>
-        <maven-plugin-annotations.version>3.6.4</maven-plugin-annotations.version>
+        <maven.version>3.9.16</maven.version>
+        <maven-plugin-api.version>3.9.16</maven-plugin-api.version>
+        <maven-plugin-annotations.version>3.15.2</maven-plugin-annotations.version>
         <maven-project.version>2.2.1</maven-project.version>
 
         <!-- Picocli for CLI -->
-        <picocli.version>4.7.5</picocli.version>
+        <picocli.version>4.7.7</picocli.version>
 
         <!-- JavaPoet for code generation -->
         <javapoet.version>1.13.0</javapoet.version>
@@ -149,7 +149,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.1</version>
+                <version>3.6.2</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
