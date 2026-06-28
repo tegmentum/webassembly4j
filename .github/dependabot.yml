@@ -37,3 +37,12 @@ updates:
         update-types:
           - minor
           - patch
+    # Major bumps of these need dedicated migrations (newer Java baseline / breaking
+    # APIs), so don't open PRs for them until tackled deliberately.
+    ignore:
+      - dependency-name: "org.springframework.boot*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.junit*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.graalvm*"
+        update-types: ["version-update:semver-major"]
