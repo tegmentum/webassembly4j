@@ -162,11 +162,19 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
         if (wasi.inheritStderr()) {
             b.inheritStderr();
         }
-        // Preopens: host path == guest path (a granular guest-remap / per-dir-perms form is a
-        // follow-on WasiContext API extension). Granting a dir grants full access within it.
+        // Preopens: host path == guest path. A dir listed in readOnlyPreopenDirs is granted read
+        // permissions only (the guest cannot create/write/delete within it); all others are
+        // read-write. (Guest-path remap remains a follow-on.)
         if (wasi.preopenDirs() != null) {
+            java.util.Set<String> readOnly = wasi.readOnlyPreopenDirs() == null
+                    ? java.util.Collections.emptySet()
+                    : new java.util.HashSet<>(wasi.readOnlyPreopenDirs());
             for (String dir : wasi.preopenDirs()) {
-                b.preopenDir(Paths.get(dir), dir, DirPerms.all(), FilePerms.all());
+                if (readOnly.contains(dir)) {
+                    b.preopenDir(Paths.get(dir), dir, DirPerms.readOnly(), FilePerms.readOnly());
+                } else {
+                    b.preopenDir(Paths.get(dir), dir, DirPerms.all(), FilePerms.all());
+                }
             }
         }
         return b.build();

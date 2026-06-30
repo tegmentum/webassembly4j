@@ -29,4 +29,13 @@ public interface WasiContext {
     default List<String> preopenDirs() {
         return Collections.emptyList();
     }
+
+    /**
+     * The subset of {@link #preopenDirs()} that is granted read-only. A directory listed here is
+     * preopened with read permissions only — the guest cannot create, write, or delete within it.
+     * Directories not listed are read-write (the default), preserving prior behaviour.
+     */
+    default List<String> readOnlyPreopenDirs() {
+        return Collections.emptyList();
+    }
 }
