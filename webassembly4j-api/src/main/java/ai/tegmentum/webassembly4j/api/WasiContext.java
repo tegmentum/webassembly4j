@@ -38,4 +38,14 @@ public interface WasiContext {
     default List<String> readOnlyPreopenDirs() {
         return Collections.emptyList();
     }
+
+    /**
+     * Optional host→guest path remaps for preopens. For a host directory in {@link #preopenDirs()},
+     * the value here is the path the guest sees it at; absent means the guest sees the host path
+     * unchanged (host == guest). Lets a policy expose, say, host {@code /var/data/app} as guest
+     * {@code /data} without leaking the host layout.
+     */
+    default Map<String, String> preopenGuestPaths() {
+        return Collections.emptyMap();
+    }
 }
