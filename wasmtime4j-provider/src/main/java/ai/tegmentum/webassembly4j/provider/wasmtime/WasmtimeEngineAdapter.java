@@ -190,9 +190,10 @@ final class WasmtimeEngineAdapter implements Engine {
             ComponentEngine componentEngine = runtime.createComponentEngine();
             ai.tegmentum.wasmtime4j.component.Component nativeComponent =
                     componentEngine.compileComponent(bytes);
-            ai.tegmentum.wasmtime4j.Store store = engine.createStore();
+            // The store is created per-instantiation (in the adapter) so ComponentConfig
+            // resource limits can be applied; see WasmtimeComponentAdapter.
             return new WasmtimeComponentAdapter(
-                    runtime, engine, componentEngine, nativeComponent, store);
+                    runtime, engine, componentEngine, nativeComponent);
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new ai.tegmentum.webassembly4j.api.exception.WebAssemblyException(
                     "Failed to load WebAssembly component", e);
