@@ -15,11 +15,13 @@ public final class DefaultWasiContext implements WasiContext {
     private final boolean inheritStderr;
     private final List<String> preopenDirs;
     private final List<String> readOnlyPreopenDirs;
+    private final Map<String, String> preopenGuestPaths;
 
     private DefaultWasiContext(List<String> args, Map<String, String> env,
                                 boolean inheritStdin, boolean inheritStdout,
                                 boolean inheritStderr, List<String> preopenDirs,
-                                List<String> readOnlyPreopenDirs) {
+                                List<String> readOnlyPreopenDirs,
+                                Map<String, String> preopenGuestPaths) {
         this.args = Collections.unmodifiableList(new ArrayList<>(args));
         this.env = Collections.unmodifiableMap(new LinkedHashMap<>(env));
         this.inheritStdin = inheritStdin;
@@ -28,6 +30,8 @@ public final class DefaultWasiContext implements WasiContext {
         this.preopenDirs = Collections.unmodifiableList(new ArrayList<>(preopenDirs));
         this.readOnlyPreopenDirs =
                 Collections.unmodifiableList(new ArrayList<>(readOnlyPreopenDirs));
+        this.preopenGuestPaths =
+                Collections.unmodifiableMap(new LinkedHashMap<>(preopenGuestPaths));
     }
 
     @Override
@@ -65,6 +69,11 @@ public final class DefaultWasiContext implements WasiContext {
         return readOnlyPreopenDirs;
     }
 
+    @Override
+    public Map<String, String> preopenGuestPaths() {
+        return preopenGuestPaths;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -78,6 +87,7 @@ public final class DefaultWasiContext implements WasiContext {
         private boolean inheritStderr;
         private final List<String> preopenDirs = new ArrayList<>();
         private final List<String> readOnlyPreopenDirs = new ArrayList<>();
+        private final Map<String, String> preopenGuestPaths = new LinkedHashMap<>();
 
         private Builder() {
         }
@@ -137,9 +147,22 @@ public final class DefaultWasiContext implements WasiContext {
             return this;
         }
 
+        /**
+         * Grant a preopen of host directory {@code hostDir} that the guest sees at {@code guestPath}
+         * (host layout not leaked). {@code writable=false} preopens it read-only.
+         */
+        public Builder preopenDir(String hostDir, String guestPath, boolean writable) {
+            this.preopenDirs.add(hostDir);
+            this.preopenGuestPaths.put(hostDir, guestPath);
+            if (!writable) {
+                this.readOnlyPreopenDirs.add(hostDir);
+            }
+            return this;
+        }
+
         public DefaultWasiContext build() {
             return new DefaultWasiContext(args, env, inheritStdin, inheritStdout,
-                    inheritStderr, preopenDirs, readOnlyPreopenDirs);
+                    inheritStderr, preopenDirs, readOnlyPreopenDirs, preopenGuestPaths);
         }
     }
 }

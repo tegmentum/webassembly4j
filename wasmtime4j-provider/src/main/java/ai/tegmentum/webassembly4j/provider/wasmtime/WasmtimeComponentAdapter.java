@@ -169,11 +169,15 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
             java.util.Set<String> readOnly = wasi.readOnlyPreopenDirs() == null
                     ? java.util.Collections.emptySet()
                     : new java.util.HashSet<>(wasi.readOnlyPreopenDirs());
+            java.util.Map<String, String> guestPaths = wasi.preopenGuestPaths() == null
+                    ? java.util.Collections.emptyMap()
+                    : wasi.preopenGuestPaths();
             for (String dir : wasi.preopenDirs()) {
+                String guest = guestPaths.getOrDefault(dir, dir); // default: guest path == host path
                 if (readOnly.contains(dir)) {
-                    b.preopenDir(Paths.get(dir), dir, DirPerms.readOnly(), FilePerms.readOnly());
+                    b.preopenDir(Paths.get(dir), guest, DirPerms.readOnly(), FilePerms.readOnly());
                 } else {
-                    b.preopenDir(Paths.get(dir), dir, DirPerms.all(), FilePerms.all());
+                    b.preopenDir(Paths.get(dir), guest, DirPerms.all(), FilePerms.all());
                 }
             }
         }
