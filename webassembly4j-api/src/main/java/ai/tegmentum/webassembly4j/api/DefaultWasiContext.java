@@ -14,16 +14,20 @@ public final class DefaultWasiContext implements WasiContext {
     private final boolean inheritStdout;
     private final boolean inheritStderr;
     private final List<String> preopenDirs;
+    private final List<String> readOnlyPreopenDirs;
 
     private DefaultWasiContext(List<String> args, Map<String, String> env,
                                 boolean inheritStdin, boolean inheritStdout,
-                                boolean inheritStderr, List<String> preopenDirs) {
+                                boolean inheritStderr, List<String> preopenDirs,
+                                List<String> readOnlyPreopenDirs) {
         this.args = Collections.unmodifiableList(new ArrayList<>(args));
         this.env = Collections.unmodifiableMap(new LinkedHashMap<>(env));
         this.inheritStdin = inheritStdin;
         this.inheritStdout = inheritStdout;
         this.inheritStderr = inheritStderr;
         this.preopenDirs = Collections.unmodifiableList(new ArrayList<>(preopenDirs));
+        this.readOnlyPreopenDirs =
+                Collections.unmodifiableList(new ArrayList<>(readOnlyPreopenDirs));
     }
 
     @Override
@@ -56,6 +60,11 @@ public final class DefaultWasiContext implements WasiContext {
         return preopenDirs;
     }
 
+    @Override
+    public List<String> readOnlyPreopenDirs() {
+        return readOnlyPreopenDirs;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -68,6 +77,7 @@ public final class DefaultWasiContext implements WasiContext {
         private boolean inheritStdout;
         private boolean inheritStderr;
         private final List<String> preopenDirs = new ArrayList<>();
+        private final List<String> readOnlyPreopenDirs = new ArrayList<>();
 
         private Builder() {
         }
@@ -110,14 +120,26 @@ public final class DefaultWasiContext implements WasiContext {
             return this;
         }
 
+        /** Grant a read-write preopen (the default). */
         public Builder preopenDir(String dir) {
+            return preopenDir(dir, true);
+        }
+
+        /**
+         * Grant a preopen with an explicit access mode. {@code writable=false} preopens the
+         * directory read-only — the guest can read but not create/write/delete within it.
+         */
+        public Builder preopenDir(String dir, boolean writable) {
             this.preopenDirs.add(dir);
+            if (!writable) {
+                this.readOnlyPreopenDirs.add(dir);
+            }
             return this;
         }
 
         public DefaultWasiContext build() {
             return new DefaultWasiContext(args, env, inheritStdin, inheritStdout,
-                    inheritStderr, preopenDirs);
+                    inheritStderr, preopenDirs, readOnlyPreopenDirs);
         }
     }
 }
