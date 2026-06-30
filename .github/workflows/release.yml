@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           ./mvnw test -B -q \
-            -pl webassembly4j-api,webassembly4j-spi,chicory4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-bindgen \
+            -pl webassembly4j-api,webassembly4j-spi,endive4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-bindgen \
             -am
 
       - name: Run tests (Java 17+ — all modules)
@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           ./mvnw test -B -q \
-            -pl webassembly4j-api,webassembly4j-spi,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen \
+            -pl webassembly4j-api,webassembly4j-spi,endive4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen \
             -am
 
   # Static analysis quality gate
@@ -128,7 +128,7 @@ jobs:
 
       - name: Install modules locally
         run: |
-          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,endive4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw install -B -q \
             -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true -DskipNativeTests \
             $DEPLOY_MODULES -am
@@ -139,7 +139,7 @@ jobs:
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,endive4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw deploy -B -P release \
             -DskipTests -Dmaven.test.skip=true -DskipNativeTests \
             $DEPLOY_MODULES
@@ -148,7 +148,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,endive4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           mkdir -p ~/.m2
           cat > ~/.m2/settings-github.xml <<'SETTINGS'
           <settings>
@@ -170,14 +170,14 @@ jobs:
 
       - name: Package artifacts
         run: |
-          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,chicory4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
+          DEPLOY_MODULES="-pl webassembly4j-api,webassembly4j-spi,wasmtime4j-provider,wamr4j-provider,wasm3-provider,endive4j-provider,graalwasm4j-provider,webassembly4j-runtime,webassembly4j-testing,webassembly4j-pool,webassembly4j-spring,webassembly4j-bindgen"
           ./mvnw package -B -P release \
             -DskipTests -Dmaven.test.skip=true -DskipNativeTests \
             $DEPLOY_MODULES
 
       - name: Create checksums
         run: |
-          for dir in webassembly4j-api/target webassembly4j-spi/target webassembly4j-runtime/target webassembly4j-testing/target webassembly4j-pool/target webassembly4j-spring/target webassembly4j-bindgen/target wasmtime4j-provider/target wamr4j-provider/target wasm3-provider/target chicory4j-provider/target graalwasm4j-provider/target; do
+          for dir in webassembly4j-api/target webassembly4j-spi/target webassembly4j-runtime/target webassembly4j-testing/target webassembly4j-pool/target webassembly4j-spring/target webassembly4j-bindgen/target wasmtime4j-provider/target wamr4j-provider/target wasm3-provider/target endive4j-provider/target graalwasm4j-provider/target; do
             if [ -d "$dir" ]; then
               for jar in "$dir"/*.jar; do
                 [ -f "$jar" ] && sha256sum "$jar" > "$jar.sha256"
@@ -210,7 +210,7 @@ jobs:
             wamr4j-provider/target/*.jar.sha256
             wasm3-provider/target/*.jar
             wasm3-provider/target/*.jar.sha256
-            chicory4j-provider/target/*.jar
-            chicory4j-provider/target/*.jar.sha256
+            endive4j-provider/target/*.jar
+            endive4j-provider/target/*.jar.sha256
             graalwasm4j-provider/target/*.jar
             graalwasm4j-provider/target/*.jar.sha256

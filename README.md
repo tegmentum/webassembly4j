@@ -2,7 +2,7 @@
 
 A unified Java API for executing WebAssembly across multiple runtimes.
 
-Write your code once against a stable API and swap runtimes without changing application code. WebAssembly4J supports [Wasmtime](https://wasmtime.dev/), [WAMR](https://bytecodealliance.github.io/wamr.dev/), [GraalWasm](https://www.graalvm.org/latest/reference-manual/wasm/), and [Chicory](https://github.com/nicholasgasior/chicory) out of the box.
+Write your code once against a stable API and swap runtimes without changing application code. WebAssembly4J supports [Wasmtime](https://wasmtime.dev/), [WAMR](https://bytecodealliance.github.io/wamr.dev/), [GraalWasm](https://www.graalvm.org/latest/reference-manual/wasm/), and [Endive](https://endive.run/) out of the box.
 
 ## Quick Start
 
@@ -116,13 +116,13 @@ try (WasmInstance inst = compiled.instantiate()) {
 | `wasmtime4j-provider` | Wasmtime (via wasmtime4j) | 11+ | 200 |
 | `graalwasm4j-provider` | GraalWasm (Polyglot API) | 17+ | 150 |
 | `wamr4j-provider` | WAMR (via wamr4j) | 17+ | 100 |
-| `chicory4j-provider` | Chicory (pure Java) | 11+ | 50 |
+| `endive4j-provider` | Endive (pure Java) | 11+ | 50 |
 
 Providers are discovered automatically via `ServiceLoader`. When multiple providers are on the classpath, the one with the highest priority is selected. To select a specific provider, use the builder:
 
 ```java
 Engine engine = WebAssembly.builder()
-    .provider("chicory")  // "wasmtime", "wamr", "graalwasm", or "chicory"
+    .provider("endive")  // "wasmtime", "wamr", "graalwasm", or "endive"
     .build();
 ```
 

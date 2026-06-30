@@ -195,7 +195,7 @@ class WasmRuntimeTest {
     @Test
     void builderWithEngineSelection() {
         int result = WasmRuntime.builder()
-                .engine("chicory")
+                .engine("endive")
                 .call(ADD_MODULE, "add", Integer.class, 3, 4);
         assertEquals(7, result);
     }
@@ -203,7 +203,7 @@ class WasmRuntimeTest {
     @Test
     void builderLoadInterface() {
         try (Calculator calc = WasmRuntime.builder()
-                .engine("chicory")
+                .engine("endive")
                 .load(Calculator.class, ADD_MODULE)) {
             assertEquals(7, calc.add(3, 4));
         } catch (Exception e) {
@@ -226,7 +226,7 @@ class WasmRuntimeTest {
     @Test
     void builderCompile() {
         try (WasmModule module = WasmRuntime.builder()
-                .engine("chicory")
+                .engine("endive")
                 .compile(ADD_MODULE)) {
             assertEquals(7, module.call("add", Integer.class, 3, 4));
         }

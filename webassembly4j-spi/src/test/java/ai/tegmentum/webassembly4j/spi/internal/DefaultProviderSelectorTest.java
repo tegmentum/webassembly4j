@@ -69,13 +69,13 @@ class DefaultProviderSelectorTest {
     @Test
     void filtersByEngineId() {
         EngineProvider wasmtime = stubProvider("wasmtime", "wasmtime-ffm", 200, 11, true);
-        EngineProvider chicory = stubProvider("chicory", "chicory", 200, 11, true);
-        ProviderContext ctx = context("chicory", null);
+        EngineProvider endive = stubProvider("endive", "endive", 200, 11, true);
+        ProviderContext ctx = context("endive", null);
 
-        ProviderSelectionResult result = selector.select(Arrays.asList(wasmtime, chicory), ctx);
+        ProviderSelectionResult result = selector.select(Arrays.asList(wasmtime, endive), ctx);
 
         assertTrue(result.selectedProvider().isPresent());
-        assertEquals("chicory", result.selectedProvider().get().descriptor().providerId());
+        assertEquals("endive", result.selectedProvider().get().descriptor().providerId());
     }
 
     @Test

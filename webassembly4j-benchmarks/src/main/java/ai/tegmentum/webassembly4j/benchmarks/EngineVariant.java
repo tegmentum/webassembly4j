@@ -1,7 +1,7 @@
 package ai.tegmentum.webassembly4j.benchmarks;
 
 import ai.tegmentum.webassembly4j.api.config.EngineConfig;
-import ai.tegmentum.webassembly4j.provider.chicory.config.ChicoryConfig;
+import ai.tegmentum.webassembly4j.provider.endive.config.EndiveConfig;
 import ai.tegmentum.webassembly4j.provider.wamr.config.WamrConfig;
 import ai.tegmentum.webassembly4j.provider.wamr.config.WamrRunningMode;
 
@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>{@code STANDARD} - native runtimes (Wasmtime, WAMR) that don't benefit from GraalVM JVMCI</li>
  *   <li>{@code GRAALVM} - GraalWasm, which requires GraalVM CE/EE for JIT compilation</li>
- *   <li>{@code ANY} - pure-Java runtimes (Chicory) that benefit from comparison on both JDKs</li>
+ *   <li>{@code ANY} - pure-Java runtimes (Endive) that benefit from comparison on both JDKs</li>
  * </ul>
  */
 public enum EngineVariant {
@@ -28,9 +28,9 @@ public enum EngineVariant {
     WAMR_LLVM_JIT_PANAMA("wamr", "wamr4j.runtime", "panama",
             () -> WamrConfig.builder().runningMode(WamrRunningMode.LLVM_JIT).build(), JdkAffinity.STANDARD),
     GRAALWASM("graalwasm", null, null, null, JdkAffinity.GRAALVM),
-    CHICORY("chicory", null, null, null, JdkAffinity.ANY),
-    CHICORY_COMPILED("chicory", null, null,
-            () -> ChicoryConfig.builder().executionMode(ChicoryConfig.ExecutionMode.COMPILE).build(),
+    ENDIVE("endive", null, null, null, JdkAffinity.ANY),
+    ENDIVE_COMPILED("endive", null, null,
+            () -> EndiveConfig.builder().executionMode(EndiveConfig.ExecutionMode.COMPILE).build(),
             JdkAffinity.ANY);
 
     public enum JdkAffinity {

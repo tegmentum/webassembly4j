@@ -1,0 +1,58 @@
+package ai.tegmentum.webassembly4j.provider.endive;
+
+import ai.tegmentum.webassembly4j.api.Engine;
+import ai.tegmentum.webassembly4j.api.config.EngineConfig;
+import ai.tegmentum.webassembly4j.api.config.WebAssemblyConfig;
+import ai.tegmentum.webassembly4j.provider.endive.config.EndiveConfig;
+import ai.tegmentum.webassembly4j.spi.EngineProvider;
+import ai.tegmentum.webassembly4j.spi.ProviderAvailability;
+import ai.tegmentum.webassembly4j.spi.ProviderDescriptor;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+
+public final class EndiveProvider implements EngineProvider {
+
+    private static final String ENGINE_ID = "endive";
+    private static final String PROVIDER_ID = "endive";
+    private static final String VERSION = "1.0.0-SNAPSHOT";
+    private static final int MIN_JAVA = 11;
+    private static final int PRIORITY = 50;
+
+    @Override
+    public ProviderDescriptor descriptor() {
+        return new ProviderDescriptor() {
+            @Override public String engineId() { return ENGINE_ID; }
+            @Override public String providerId() { return PROVIDER_ID; }
+            @Override public String version() { return VERSION; }
+            @Override public int minimumJavaVersion() { return MIN_JAVA; }
+            @Override public Set<String> tags() {
+                Set<String> tags = new HashSet<>();
+                tags.add("pure-java");
+                tags.add("interpreter");
+                return Collections.unmodifiableSet(tags);
+            }
+            @Override public int priority() { return PRIORITY; }
+        };
+    }
+
+    @Override
+    public ProviderAvailability availability() {
+        return new ProviderAvailability() {
+            @Override public boolean available() { return true; }
+            @Override public String message() { return "Endive pure-Java runtime always available"; }
+        };
+    }
+
+    @Override
+    public Optional<Class<? extends EngineConfig>> configType() {
+        return Optional.of(EndiveConfig.class);
+    }
+
+    @Override
+    public Engine create(WebAssemblyConfig config) {
+        return EndiveEngineAdapter.create(config);
+    }
+}
