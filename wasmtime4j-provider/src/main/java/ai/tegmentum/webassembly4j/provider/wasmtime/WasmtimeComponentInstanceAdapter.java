@@ -1,11 +1,24 @@
 package ai.tegmentum.webassembly4j.provider.wasmtime;
 
+import ai.tegmentum.wasmtime4j.wit.WitBool;
+import ai.tegmentum.wasmtime4j.wit.WitChar;
+import ai.tegmentum.wasmtime4j.wit.WitFloat32;
+import ai.tegmentum.wasmtime4j.wit.WitFloat64;
+import ai.tegmentum.wasmtime4j.wit.WitList;
+import ai.tegmentum.wasmtime4j.wit.WitS16;
+import ai.tegmentum.wasmtime4j.wit.WitS32;
+import ai.tegmentum.wasmtime4j.wit.WitS64;
+import ai.tegmentum.wasmtime4j.wit.WitS8;
+import ai.tegmentum.wasmtime4j.wit.WitString;
+import ai.tegmentum.wasmtime4j.wit.WitU8;
+import ai.tegmentum.wasmtime4j.wit.WitValue;
 import ai.tegmentum.webassembly4j.api.ComponentInstance;
 import ai.tegmentum.webassembly4j.api.Function;
 import ai.tegmentum.webassembly4j.api.Global;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Table;
 import ai.tegmentum.webassembly4j.api.exception.ExecutionException;
+import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,12 +37,96 @@ final class WasmtimeComponentInstanceAdapter implements ComponentInstance {
 
     @Override
     public Object invoke(String functionName, Object... args) {
+        Object[] witArgs = new Object[args.length];
+        for (int i = 0; i < args.length; i++) {
+            try {
+                witArgs[i] = toWitValue(args[i]);
+            } catch (UnsupportedFeatureException e) {
+                throw new UnsupportedFeatureException(
+                        "Argument " + i + " of '" + functionName + "': " + e.getMessage(), e);
+            } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+                throw new ExecutionException(
+                        "Argument " + i + " of '" + functionName + "' is not a valid WIT value", e);
+            }
+        }
         try {
-            return nativeInstance.invoke(functionName, args);
+            return nativeInstance.invoke(functionName, witArgs);
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new ExecutionException(
                     "Failed to invoke component function: " + functionName, e);
         }
+    }
+
+    /**
+     * Marshal a natural Java argument into a {@link WitValue}, fulfilling the
+     * {@link ComponentInstance#invoke} contract. Values already of type {@code WitValue} pass
+     * through unchanged — the escape hatch for WIT types whose target type can't be inferred from a
+     * bare Java value (option/result/record/variant/enum/flags, and exact integer widths beyond the
+     * defaults below).
+     *
+     * <p>Mapping: Boolean→bool, Byte→s8, Short→s16, Integer→s32, Long→s64, Float→f32, Double→f64,
+     * Character→char, String→string, {@code byte[]}→list&lt;u8&gt;, non-empty homogeneous List→list
+     * (elements marshalled recursively). Integer/Long default to the signed widths; pass an explicit
+     * {@code WitValue} (e.g. {@code WitU64.of(..)}) for unsigned or narrower-than-natural widths.
+     */
+    static WitValue toWitValue(Object arg)
+            throws ai.tegmentum.wasmtime4j.exception.WasmException {
+        if (arg instanceof WitValue) {
+            return (WitValue) arg;
+        }
+        if (arg instanceof Boolean) {
+            return WitBool.of((Boolean) arg);
+        }
+        if (arg instanceof Byte) {
+            return WitS8.of((Byte) arg);
+        }
+        if (arg instanceof Short) {
+            return WitS16.of((Short) arg);
+        }
+        if (arg instanceof Integer) {
+            return WitS32.of((Integer) arg);
+        }
+        if (arg instanceof Long) {
+            return WitS64.of((Long) arg);
+        }
+        if (arg instanceof Float) {
+            return WitFloat32.of((Float) arg);
+        }
+        if (arg instanceof Double) {
+            return WitFloat64.of((Double) arg);
+        }
+        if (arg instanceof Character) {
+            return WitChar.of((Character) arg);
+        }
+        if (arg instanceof String) {
+            return WitString.of((String) arg);
+        }
+        if (arg instanceof byte[]) {
+            byte[] bytes = (byte[]) arg;
+            List<WitValue> elems = new ArrayList<>(bytes.length);
+            for (byte b : bytes) {
+                elems.add(WitU8.of(b));
+            }
+            return WitList.of(elems);
+        }
+        if (arg instanceof List) {
+            List<?> list = (List<?>) arg;
+            if (list.isEmpty()) {
+                throw new UnsupportedFeatureException(
+                        "cannot infer element type of an empty list; pass a typed "
+                        + "WitList.empty(elementType)");
+            }
+            List<WitValue> elems = new ArrayList<>(list.size());
+            for (Object e : list) {
+                elems.add(toWitValue(e));
+            }
+            return WitList.of(elems);
+        }
+        throw new UnsupportedFeatureException(
+                "cannot marshal Java type "
+                + (arg == null ? "null" : arg.getClass().getName())
+                + " to a WIT value; build a WitValue explicitly "
+                + "(option/result/record/variant/enum/flags and null require an explicit type)");
     }
 
     @Override
