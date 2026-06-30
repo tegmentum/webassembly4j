@@ -46,7 +46,7 @@ public class WasmTestExtension implements TestTemplateInvocationContextProvider,
         if (engines.isEmpty()) {
             throw new IllegalStateException(
                     "No WebAssembly engines found on the classpath. "
-                    + "Add a provider dependency (e.g., wasmtime4j-provider, chicory4j-provider).");
+                    + "Add a provider dependency (e.g., wasmtime4j-provider, endive4j-provider).");
         }
         return engines.stream().map(factory -> createInvocationContext(factory, context));
     }

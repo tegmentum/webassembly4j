@@ -6,7 +6,7 @@ package ai.tegmentum.webassembly4j.api.config;
  * <p>The {@code webassembly4j-api} module is intentionally free of provider-specific
  * types, so this interface carries no methods. Each provider artifact ships its own
  * concrete implementation that exposes the tunables for that engine — for example
- * {@code WasmtimeConfig}, {@code WamrConfig}, or {@code ChicoryConfig}. Obtain one
+ * {@code WasmtimeConfig}, {@code WamrConfig}, or {@code EndiveConfig}. Obtain one
  * from the provider's builder and hand it to
  * {@link WebAssemblyConfigBuilder#engineConfig(EngineConfig)}:</p>
  *

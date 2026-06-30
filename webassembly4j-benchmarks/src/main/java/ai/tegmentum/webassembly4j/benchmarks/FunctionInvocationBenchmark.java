@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 5)
 public class FunctionInvocationBenchmark {
 
-    @Param({"WASMTIME_JNI", "WASMTIME_PANAMA", "WAMR_JNI", "WAMR_PANAMA", "WAMR_LLVM_JIT_JNI", "WAMR_LLVM_JIT_PANAMA", "GRAALWASM", "CHICORY", "CHICORY_COMPILED"})
+    @Param({"WASMTIME_JNI", "WASMTIME_PANAMA", "WAMR_JNI", "WAMR_PANAMA", "WAMR_LLVM_JIT_JNI", "WAMR_LLVM_JIT_PANAMA", "GRAALWASM", "ENDIVE", "ENDIVE_COMPILED"})
     private String variant;
 
     private Engine engine;

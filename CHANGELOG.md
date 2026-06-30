@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0
+
+### Breaking Changes
+
+- **Chicory provider renamed to Endive**: Chicory has been donated to the Bytecode Alliance and renamed [Endive](https://endive.run/). The provider module `chicory4j-provider` is now `endive4j-provider`, the provider/engine ID `"chicory"` is now `"endive"`, and the config facade classes (`ChicoryConfig`, `ChicoryConfigs`) are now `EndiveConfig`/`EndiveConfigs`. The underlying dependency moved from `com.dylibso.chicory` to `run.endive` (1.0.0). Update any `.provider("chicory")`/`.engine("chicory")` calls to `"endive"` and any `ChicoryConfig` references to `EndiveConfig`.
+
+  The major version bump reflects this breaking change to the public provider ID and configuration classes; all other modules are source- and behavior-compatible with 1.5.0.
+
 ## 1.4.0
 
 ### New Features

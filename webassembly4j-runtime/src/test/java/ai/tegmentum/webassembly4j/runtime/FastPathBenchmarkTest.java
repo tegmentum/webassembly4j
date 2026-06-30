@@ -7,7 +7,7 @@ import ai.tegmentum.webassembly4j.api.WebAssembly;
 import org.junit.jupiter.api.Test;
 
 /**
- * Benchmarks for function signatures that hit vs miss the Chicory FastPath.
+ * Benchmarks for function signatures that hit vs miss the Endive FastPath.
  */
 class FastPathBenchmarkTest {
 

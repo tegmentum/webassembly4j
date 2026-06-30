@@ -12,7 +12,7 @@ public final class BenchmarkReportGenerator {
 
     private static final String[] VARIANT_ORDER = {
         "WASMTIME_JNI", "WASMTIME_PANAMA", "WAMR_JNI", "WAMR_PANAMA",
-        "WAMR_LLVM_JIT_JNI", "WAMR_LLVM_JIT_PANAMA", "GRAALWASM", "CHICORY"
+        "WAMR_LLVM_JIT_JNI", "WAMR_LLVM_JIT_PANAMA", "GRAALWASM", "ENDIVE"
     };
 
     private static final Map<String, String> VARIANT_LABELS = new LinkedHashMap<>();
@@ -24,7 +24,7 @@ public final class BenchmarkReportGenerator {
         VARIANT_LABELS.put("WAMR_LLVM_JIT_JNI", "WAMR LLVM JNI");
         VARIANT_LABELS.put("WAMR_LLVM_JIT_PANAMA", "WAMR LLVM Panama");
         VARIANT_LABELS.put("GRAALWASM", "GraalWasm");
-        VARIANT_LABELS.put("CHICORY", "Chicory");
+        VARIANT_LABELS.put("ENDIVE", "Endive");
     }
 
     public static void main(String[] args) throws IOException {
