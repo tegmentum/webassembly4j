@@ -69,6 +69,18 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
             ai.tegmentum.wasmtime4j.Store store = newStore(config);
             ComponentLinker<Object> linker = ComponentLinker.create(engine);
 
+            // Memory cap + epoch deadline can't be read back from the store (unlike fuel), so carry
+            // them to the instantiation explicitly. The component runs on wasmtime4j's shared
+            // component engine (metered for fuel + epoch), so these apply regardless of this
+            // engine's own config. -1 = unlimited.
+            if (config != null) {
+                long maxMemory = config.maxMemoryBytes().isPresent()
+                        ? config.maxMemoryBytes().getAsLong() : -1L;
+                long epoch = config.epochDeadline().isPresent()
+                        ? config.epochDeadline().getAsLong() : -1L;
+                linker.setComponentResourceLimits(maxMemory, epoch);
+            }
+
             WasiContext wasi = linkingContext != null ? linkingContext.wasiContext() : null;
             if (wasi != null) {
                 // Forward the capability policy (preopens / env / stdio) into the component's
