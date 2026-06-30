@@ -105,15 +105,19 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
         } else {
             store = engine.createStore();
         }
-        if (config != null) {
-            // Fuel/epoch are only settable when the engine was built with them enabled; otherwise
-            // skip rather than trap (the engine config governs whether they're available).
-            if (config.fuelLimit().isPresent() && engine.isFuelEnabled()) {
-                store.setFuel(config.fuelLimit().getAsLong());
-            }
-            if (config.epochDeadline().isPresent() && engine.isEpochInterruptionEnabled()) {
-                store.setEpochDeadline(config.epochDeadline().getAsLong());
-            }
+        // Fuel: when the engine meters fuel, the store's remaining fuel is what the component
+        // provider carries down as the per-instance compute cap. Set the requested cap, or
+        // MAX_VALUE ("unlimited") when none is given — otherwise a metered store defaults to 0 fuel
+        // and the component would trap on its first instruction.
+        if (engine.isFuelEnabled()) {
+            long fuel = (config != null && config.fuelLimit().isPresent())
+                    ? config.fuelLimit().getAsLong()
+                    : Long.MAX_VALUE;
+            store.setFuel(fuel);
+        }
+        if (config != null && config.epochDeadline().isPresent()
+                && engine.isEpochInterruptionEnabled()) {
+            store.setEpochDeadline(config.epochDeadline().getAsLong());
         }
         stores.add(store);
         return store;
