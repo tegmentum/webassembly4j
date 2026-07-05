@@ -37,7 +37,28 @@ final class WasmtimeComponentInstanceAdapter implements ComponentInstance {
 
     @Override
     public Object invoke(String functionName, Object... args) {
-        Object[] witArgs = new Object[args.length];
+        final Object[] witArgs = marshalArgs(functionName, args);
+        try {
+            return nativeInstance.invoke(functionName, witArgs);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ExecutionException(
+                    "Failed to invoke component function: " + functionName, e);
+        }
+    }
+
+    @Override
+    public Object invokeWit(String functionName, Object... args) {
+        final Object[] witArgs = marshalArgs(functionName, args);
+        try {
+            return nativeInstance.invokeWit(functionName, witArgs);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ExecutionException(
+                    "Failed to invoke component function: " + functionName, e);
+        }
+    }
+
+    private static Object[] marshalArgs(String functionName, Object[] args) {
+        final Object[] witArgs = new Object[args.length];
         for (int i = 0; i < args.length; i++) {
             try {
                 witArgs[i] = toWitValue(args[i]);
@@ -49,12 +70,7 @@ final class WasmtimeComponentInstanceAdapter implements ComponentInstance {
                         "Argument " + i + " of '" + functionName + "' is not a valid WIT value", e);
             }
         }
-        try {
-            return nativeInstance.invoke(functionName, witArgs);
-        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
-            throw new ExecutionException(
-                    "Failed to invoke component function: " + functionName, e);
-        }
+        return witArgs;
     }
 
     /**

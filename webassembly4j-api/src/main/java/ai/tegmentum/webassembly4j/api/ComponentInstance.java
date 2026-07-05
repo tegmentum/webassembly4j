@@ -43,6 +43,33 @@ public interface ComponentInstance extends Instance {
     Object invoke(String functionName, Object... args);
 
     /**
+     * Typed variant of {@link #invoke} that returns the raw WIT value tree from the
+     * provider instead of unwrapping it to a natural Java shape via
+     * {@code WitValue.toJava()}. Symmetric with the input side, which already
+     * requires typed values for records/variants/options/results.
+     *
+     * <p>Callers doing round-trip WIT marshalling (typed in, typed out) should prefer
+     * this over {@link #invoke} — it saves an extra pass through {@code toJava()}
+     * and preserves precise WIT typing that the Java-shape unwrap loses (e.g. u64
+     * width, enum discriminants, option's inner type).
+     *
+     * <p>The return type is {@code Object} rather than a stronger provider-specific
+     * WIT type to keep this interface provider-neutral; the concrete type is the
+     * provider's WIT value tree (for wasmtime, {@code ai.tegmentum.wasmtime4j.wit.WitValue}).
+     *
+     * <p>Default implementation delegates to {@link #invoke}. Providers with a
+     * typed native invoke path should override.
+     *
+     * @param functionName the exported function name
+     * @param args the function arguments
+     * @return the provider's WIT value, or {@code null} for void functions
+     * @throws ai.tegmentum.webassembly4j.api.exception.ExecutionException if invocation fails
+     */
+    default Object invokeWit(String functionName, Object... args) {
+        return invoke(functionName, args);
+    }
+
+    /**
      * Returns whether this instance exports a function with the given name.
      */
     boolean hasFunction(String name);
