@@ -82,14 +82,16 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
             }
 
             WasiContext wasi = linkingContext != null ? linkingContext.wasiContext() : null;
-            if (wasi != null) {
-                // Forward the capability policy (preopens / env / stdio) into the component's
-                // WASI Preview 2 context. Network is denied unless explicitly granted (not yet
-                // expressible through WasiContext), matching deny-by-default.
-                linker.enableWasiPreview2(toWasiPreview2Config(wasi));
-            } else {
-                linker.enableWasiPreview2();
-            }
+            // Always route through the (config) overload — the no-arg variant leaves the
+            // linker's stored wasiConfig null, and JniComponentLinker.instantiate falls back to
+            // the stub linker path (Fix 12 tracking) which returns a phantom instance ID and the
+            // subsequent invoke fails with "Instance ID N not found in engine". A default config
+            // (no preopens, no env, deny-network) yields a WASI context that resolves the guest's
+            // imports without granting anything.
+            WasiPreview2Config p2 = (wasi != null)
+                    ? toWasiPreview2Config(wasi)
+                    : WasiPreview2Config.builder().build();
+            linker.enableWasiPreview2(p2);
 
             ai.tegmentum.wasmtime4j.component.ComponentInstance nativeInstance =
                     linker.instantiate(store, nativeComponent);
