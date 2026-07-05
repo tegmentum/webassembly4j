@@ -2,13 +2,16 @@ package ai.tegmentum.webassembly4j.provider.wasmtime;
 
 import ai.tegmentum.wasmtime4j.WasmRuntime;
 import ai.tegmentum.wasmtime4j.component.ComponentEngine;
+import ai.tegmentum.wasmtime4j.component.ComponentHostFunction;
 import ai.tegmentum.wasmtime4j.component.ComponentLinker;
+import ai.tegmentum.wasmtime4j.component.ComponentVal;
 import ai.tegmentum.wasmtime4j.wasi.DirPerms;
 import ai.tegmentum.wasmtime4j.wasi.FilePerms;
 import ai.tegmentum.wasmtime4j.wasi.WasiPreview2Config;
 import ai.tegmentum.webassembly4j.api.ComponentInstance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.WasiContext;
+import ai.tegmentum.webassembly4j.api.WitHostFunctionDefinition;
 import ai.tegmentum.webassembly4j.api.config.ComponentConfig;
 import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
 import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
@@ -92,6 +95,26 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
                     ? toWasiPreview2Config(wasi)
                     : WasiPreview2Config.builder().build();
             linker.enableWasiPreview2(p2);
+
+            // Register any WIT-typed host imports declared on the linking context. Each is
+            // wrapped in a native ComponentHostFunction that just delegates — the caller
+            // (whose api-level function takes/returns Object[]) already speaks the provider's
+            // native value type (ComponentVal here); a cross-provider WIT value abstraction
+            // is intentionally out of scope for this version.
+            if (linkingContext != null) {
+                for (WitHostFunctionDefinition def : linkingContext.witHostFunctions()) {
+                    final WitHostFunctionDefinition d = def;
+                    ComponentHostFunction impl = args -> {
+                        Object[] argsArr = new Object[args.size()];
+                        for (int i = 0; i < args.size(); i++) argsArr[i] = args.get(i);
+                        Object[] results = d.function().execute(argsArr);
+                        java.util.List<ComponentVal> out = new java.util.ArrayList<>(results.length);
+                        for (Object r : results) out.add((ComponentVal) r);
+                        return out;
+                    };
+                    linker.defineFunction(def.witPath(), impl);
+                }
+            }
 
             ai.tegmentum.wasmtime4j.component.ComponentInstance nativeInstance =
                     linker.instantiate(store, nativeComponent);
