@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.0
+
+### New Features
+
+- **Component Model invocation, end-to-end (Wasmtime)**: `ComponentInstance.invoke()` now marshals natural Java argument types across the full composite type surface (record / list / option / variant / result / tuple / enum / flags), and `ComponentInstance.invokeWit` provides a symmetric typed round-trip that returns the raw `WitValue` tree instead of a lossy `toJava()` conversion, preserving `u64` width, enum discriminants, and option inner types.
+- **WIT-typed host imports via `LinkingContext`**: register host functions against WIT interface types so component imports resolve to strongly-typed Java lambdas.
+- **WASI preopens with per-directory read-only + host→guest path remapping**: preopens can now be marked read-only individually, and the guest-visible path can differ from the host path.
+- **Per-instance component resource caps**: memory, epoch, and fuel caps are forwarded through to component instantiation on the Wasmtime provider (metered stores get a real fuel budget instead of running unbounded).
+
+### Bug Fixes
+
+- **Wasmtime provider**: component instantiation is now routed through the WASI-config path so `WasiContext` + `ComponentConfig` are honored end-to-end.
+
+### Dependency Upgrades
+
+- wasmtime4j: 46.0.1-1.1.7 → 46.0.1-1.2.0 (Component Model end-to-end, per-instance fuel/memory/epoch caps, WIT marshalling fixes, panama artifact fix)
+
 ## 2.0.0
 
 ### Breaking Changes
