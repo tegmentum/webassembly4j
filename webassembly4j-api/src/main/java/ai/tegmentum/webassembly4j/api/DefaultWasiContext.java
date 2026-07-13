@@ -16,12 +16,15 @@ public final class DefaultWasiContext implements WasiContext {
     private final List<String> preopenDirs;
     private final List<String> readOnlyPreopenDirs;
     private final Map<String, String> preopenGuestPaths;
+    private final boolean allowNetwork;
+    private final List<NetworkEgressRule> egressRules;
 
     private DefaultWasiContext(List<String> args, Map<String, String> env,
                                 boolean inheritStdin, boolean inheritStdout,
                                 boolean inheritStderr, List<String> preopenDirs,
                                 List<String> readOnlyPreopenDirs,
-                                Map<String, String> preopenGuestPaths) {
+                                Map<String, String> preopenGuestPaths,
+                                boolean allowNetwork, List<NetworkEgressRule> egressRules) {
         this.args = Collections.unmodifiableList(new ArrayList<>(args));
         this.env = Collections.unmodifiableMap(new LinkedHashMap<>(env));
         this.inheritStdin = inheritStdin;
@@ -32,6 +35,8 @@ public final class DefaultWasiContext implements WasiContext {
                 Collections.unmodifiableList(new ArrayList<>(readOnlyPreopenDirs));
         this.preopenGuestPaths =
                 Collections.unmodifiableMap(new LinkedHashMap<>(preopenGuestPaths));
+        this.allowNetwork = allowNetwork;
+        this.egressRules = Collections.unmodifiableList(new ArrayList<>(egressRules));
     }
 
     @Override
@@ -74,6 +79,16 @@ public final class DefaultWasiContext implements WasiContext {
         return preopenGuestPaths;
     }
 
+    @Override
+    public boolean allowNetwork() {
+        return allowNetwork;
+    }
+
+    @Override
+    public List<NetworkEgressRule> egressRules() {
+        return egressRules;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -88,6 +103,8 @@ public final class DefaultWasiContext implements WasiContext {
         private final List<String> preopenDirs = new ArrayList<>();
         private final List<String> readOnlyPreopenDirs = new ArrayList<>();
         private final Map<String, String> preopenGuestPaths = new LinkedHashMap<>();
+        private boolean allowNetwork;
+        private final List<NetworkEgressRule> egressRules = new ArrayList<>();
 
         private Builder() {
         }
@@ -160,9 +177,23 @@ public final class DefaultWasiContext implements WasiContext {
             return this;
         }
 
+        /** Allow (or deny) the guest to open outbound network connections. Default deny. */
+        public Builder allowNetwork(boolean allow) {
+            this.allowNetwork = allow;
+            return this;
+        }
+
+        /** Add an egress allow-list rule (implies {@link #allowNetwork(boolean) allowNetwork(true)}). */
+        public Builder allowEgress(NetworkEgressRule rule) {
+            this.egressRules.add(rule);
+            this.allowNetwork = true;
+            return this;
+        }
+
         public DefaultWasiContext build() {
             return new DefaultWasiContext(args, env, inheritStdin, inheritStdout,
-                    inheritStderr, preopenDirs, readOnlyPreopenDirs, preopenGuestPaths);
+                    inheritStderr, preopenDirs, readOnlyPreopenDirs, preopenGuestPaths,
+                    allowNetwork, egressRules);
         }
     }
 }

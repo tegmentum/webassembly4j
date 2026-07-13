@@ -48,4 +48,23 @@ public interface WasiContext {
     default Map<String, String> preopenGuestPaths() {
         return Collections.emptyMap();
     }
+
+    /**
+     * Whether the guest may open outbound network connections. Default {@code false} (deny-by-default);
+     * only true when a policy grants egress. Even when true, {@link #egressRules()} is the allow-list
+     * that gates which endpoints are reachable — an empty rule set with {@code allowNetwork()==true}
+     * denies everything.
+     */
+    default boolean allowNetwork() {
+        return false;
+    }
+
+    /**
+     * The network egress allow-list: outbound connections are permitted only to an endpoint matching one
+     * of these rules. Empty ⇒ deny-all. The provider must additionally deny every bind/listen use, so
+     * these rules can only ever grant <em>egress</em>, never ingress.
+     */
+    default List<NetworkEgressRule> egressRules() {
+        return Collections.emptyList();
+    }
 }

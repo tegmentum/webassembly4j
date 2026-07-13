@@ -206,6 +206,34 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
                 }
             }
         }
+        // Network egress: deny-by-default unless the policy grants it. When granted, allow TCP/UDP but
+        // gate every connection through a SocketAddrCheck that permits ONLY egress (connect / outgoing
+        // datagram) to an allow-listed endpoint and denies every bind/listen use — no ingress, ever.
+        if (wasi.allowNetwork() && wasi.egressRules() != null && !wasi.egressRules().isEmpty()) {
+            final java.util.List<ai.tegmentum.webassembly4j.api.NetworkEgressRule> rules =
+                    new ArrayList<>(wasi.egressRules());
+            b.allowNetwork(true).allowTcp(true).allowUdp(true);
+            b.socketAddrCheck((address, use) -> {
+                final boolean tcp;
+                switch (use) {
+                    case TCP_CONNECT:
+                        tcp = true;
+                        break;
+                    case UDP_CONNECT:
+                    case UDP_OUTGOING_DATAGRAM:
+                        tcp = false;
+                        break;
+                    default:
+                        return false; // deny all *_BIND — egress only
+                }
+                for (ai.tegmentum.webassembly4j.api.NetworkEgressRule r : rules) {
+                    if (r.matches(address, tcp)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
         return b.build();
     }
 
