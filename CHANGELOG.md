@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0
+
+### New Features
+
+- **Network egress allow-list (Wasmtime)**: new `NetworkEgressRule` (literal IP or CIDR + port + tcp/udp) with total, fail-closed matching including CIDR containment. `WasiContext` gains `allowNetwork()` and `egressRules()`; `DefaultWasiContext.Builder` gains `allowNetwork()` and `allowEgress()`. The Wasmtime component adapter maps a granted context to `allowNetwork(true)` + `allowTcp`/`allowUdp` and installs a `SocketAddrCheck` that permits only `connect`/`outgoing-datagram` to allow-listed endpoints while denying every `bind`/`listen` use (egress only, no ingress).
+
+### Dependency Upgrades
+
+- wasmtime4j: 46.0.1-1.2.0 → 46.0.1-1.3.0
+- endive: 1.0.0 → 1.0.1
+- GraalVM Polyglot: 24.2.1 → 24.2.2
+- JUnit Jupiter: 5.10.4 → 5.14.4
+- Jackson: 2.22.0 → 2.22.1
+- Spring Boot: 3.2.5 → 3.5.16
+
 ## 2.1.0
 
 ### New Features
