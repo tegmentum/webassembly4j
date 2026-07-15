@@ -234,6 +234,16 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
                 return false;
             });
         }
+        // Filesystem-denial observability: if the policy supplied an engine-neutral FsAccessObserver,
+        // bridge it to wasmtime4j's own observer so a denied component open-at/stat-at on the preopen
+        // path surfaces the raw guest path + classified reason. Observe-only — it cannot change the
+        // enforcement outcome (wasmtime has already refused the open by the time this fires).
+        if (wasi.fsAccessObserver() != null && wasi.fsAccessObserver().isPresent()) {
+            final ai.tegmentum.webassembly4j.api.FsAccessObserver neutral = wasi.fsAccessObserver().get();
+            b.fsAccessObserver(
+                    (path, operation, reason, errorCode) ->
+                            neutral.onDenied(path, operation, reason, errorCode));
+        }
         return b.build();
     }
 
