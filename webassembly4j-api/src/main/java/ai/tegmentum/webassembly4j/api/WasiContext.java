@@ -3,6 +3,7 @@ package ai.tegmentum.webassembly4j.api;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface WasiContext {
 
@@ -66,5 +67,16 @@ public interface WasiContext {
      */
     default List<NetworkEgressRule> egressRules() {
         return Collections.emptyList();
+    }
+
+    /**
+     * An optional observe-only hook notified when the guest's path-based filesystem access is denied on
+     * the capability-confined (WASI preopen) instantiation path. Empty by default (no observation). When
+     * present, a provider that supports a native denial hook installs it so a denied {@code open-at} /
+     * {@code stat-at} surfaces the raw guest path and the classified reason to the host — pure
+     * observability, it never changes enforcement. Providers without such a hook ignore it.
+     */
+    default Optional<FsAccessObserver> fsAccessObserver() {
+        return Optional.empty();
     }
 }
