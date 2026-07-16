@@ -9,14 +9,17 @@ import java.util.Map;
 public final class DefaultLinkingContext implements LinkingContext {
 
     private final WasiContext wasiContext;
+    private final WasiNnConfig wasiNnConfig;
     private final Map<String, Object> imports;
     private final List<HostFunctionDefinition> hostFunctions;
     private final List<WitHostFunctionDefinition> witHostFunctions;
 
-    private DefaultLinkingContext(WasiContext wasiContext, Map<String, Object> imports,
+    private DefaultLinkingContext(WasiContext wasiContext, WasiNnConfig wasiNnConfig,
+                                  Map<String, Object> imports,
                                   List<HostFunctionDefinition> hostFunctions,
                                   List<WitHostFunctionDefinition> witHostFunctions) {
         this.wasiContext = wasiContext;
+        this.wasiNnConfig = wasiNnConfig;
         this.imports = Collections.unmodifiableMap(new LinkedHashMap<>(imports));
         this.hostFunctions = Collections.unmodifiableList(new ArrayList<>(hostFunctions));
         this.witHostFunctions = Collections.unmodifiableList(new ArrayList<>(witHostFunctions));
@@ -25,6 +28,11 @@ public final class DefaultLinkingContext implements LinkingContext {
     @Override
     public WasiContext wasiContext() {
         return wasiContext;
+    }
+
+    @Override
+    public WasiNnConfig wasiNnConfig() {
+        return wasiNnConfig;
     }
 
     @Override
@@ -48,6 +56,7 @@ public final class DefaultLinkingContext implements LinkingContext {
     public static final class Builder {
 
         private WasiContext wasiContext;
+        private WasiNnConfig wasiNnConfig;
         private final Map<String, Object> imports = new LinkedHashMap<>();
         private final List<HostFunctionDefinition> hostFunctions = new ArrayList<>();
         private final List<WitHostFunctionDefinition> witHostFunctions = new ArrayList<>();
@@ -57,6 +66,21 @@ public final class DefaultLinkingContext implements LinkingContext {
 
         public Builder wasiContext(WasiContext wasiContext) {
             this.wasiContext = wasiContext;
+            return this;
+        }
+
+        /**
+         * Enable WASI-NN on the resulting linking context with the given
+         * configuration. Providers that support wasi:nn (currently
+         * wasmtime4j-provider) translate this to their native enablement call
+         * before component instantiation. Passing {@link WasiNnConfig#defaults()}
+         * requests the provider's default backend set (ORT/ONNX under the
+         * current wasmtime4j pin). Passing {@code null} clears the request.
+         *
+         * @param config the WASI-NN configuration; {@code null} disables
+         */
+        public Builder enableWasiNn(WasiNnConfig config) {
+            this.wasiNnConfig = config;
             return this;
         }
 
@@ -94,7 +118,8 @@ public final class DefaultLinkingContext implements LinkingContext {
         }
 
         public DefaultLinkingContext build() {
-            return new DefaultLinkingContext(wasiContext, imports, hostFunctions, witHostFunctions);
+            return new DefaultLinkingContext(
+                    wasiContext, wasiNnConfig, imports, hostFunctions, witHostFunctions);
         }
     }
 }

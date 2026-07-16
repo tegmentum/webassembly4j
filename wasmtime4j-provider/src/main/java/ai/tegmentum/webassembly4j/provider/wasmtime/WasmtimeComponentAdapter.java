@@ -11,6 +11,7 @@ import ai.tegmentum.wasmtime4j.wasi.WasiPreview2Config;
 import ai.tegmentum.webassembly4j.api.ComponentInstance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.WasiContext;
+import ai.tegmentum.webassembly4j.api.WasiNnConfig;
 import ai.tegmentum.webassembly4j.api.WitHostFunctionDefinition;
 import ai.tegmentum.webassembly4j.api.config.ComponentConfig;
 import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
@@ -95,6 +96,16 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
                     ? toWasiPreview2Config(wasi)
                     : WasiPreview2Config.builder().build();
             linker.enableWasiPreview2(p2);
+
+            // WASI-NN opt-in: translate the framework-neutral WasiNnConfig into
+            // wasmtime4j's native WasiNnConfig and register wasi:nn on the linker
+            // before instantiation. Providers without wasi:nn surface via the
+            // native linker throwing WasmException; we let that propagate as
+            // InstantiationException below.
+            WasiNnConfig nn = linkingContext != null ? linkingContext.wasiNnConfig() : null;
+            if (nn != null) {
+                linker.enableWasiNn(toNativeWasiNnConfig(nn));
+            }
 
             // Register any WIT-typed host imports declared on the linking context. Each is
             // wrapped in a native ComponentHostFunction that just delegates — the caller
@@ -243,6 +254,23 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
             b.fsAccessObserver(
                     (path, operation, reason, errorCode) ->
                             neutral.onDenied(path, operation, reason, errorCode));
+        }
+        return b.build();
+    }
+
+    /**
+     * Translate the provider-neutral WasiNnConfig into wasmtime4j's native
+     * WasiNnConfig. Named-model entries are copied via the native builder
+     * (which itself clones the byte array). Package-private for unit test.
+     */
+    static ai.tegmentum.wasmtime4j.wasi.nn.WasiNnConfig toNativeWasiNnConfig(WasiNnConfig config) {
+        if (config == null || config.namedModels().isEmpty()) {
+            return ai.tegmentum.wasmtime4j.wasi.nn.WasiNnConfig.defaults();
+        }
+        ai.tegmentum.wasmtime4j.wasi.nn.WasiNnConfig.Builder b =
+                ai.tegmentum.wasmtime4j.wasi.nn.WasiNnConfig.builder();
+        for (java.util.Map.Entry<String, byte[]> e : config.namedModels().entrySet()) {
+            b.registerModel(e.getKey(), e.getValue());
         }
         return b.build();
     }
