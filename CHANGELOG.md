@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0
+
+### New Features
+
+- **Engine-neutral filesystem access observer**: new `ai.tegmentum.webassembly4j.api.FsAccessObserver`, an observe-only callback fired when a component's path-based filesystem open is denied on the WASI preopen path. Surfaces the raw guest path and a classified reason (`java.lang` types only, no runtime dependency). Wired as an optional `WasiContext.fsAccessObserver()`. The Wasmtime provider bridges a present observer through to wasmtime4j's `WasiPreview2Config.fsAccessObserver` so denied `open-at`/`stat-at` calls report the raw guest path + reason to the host. Observe-only: the observer cannot change the enforcement outcome.
+
+### Dependency Upgrades
+
+- wasmtime4j: 46.0.1-1.3.0 → 46.0.1-1.3.1
+
 ## 2.2.0
 
 ### New Features
