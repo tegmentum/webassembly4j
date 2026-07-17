@@ -323,6 +323,44 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
         }
     }
 
+    /**
+     * Reports whether the loaded wasmtime4j native library was compiled with the
+     * {@code wasi-nn} cargo feature. Delegates via reflection to wasmtime4j's
+     * static probe (which itself queries a compile-time constant baked into the
+     * native), so the answer is cheap and stable for the process lifetime — no
+     * exception-catching semantics required. When {@code false}, callers must
+     * not pass a {@link WasiNnConfig} through
+     * {@link ai.tegmentum.webassembly4j.api.DefaultLinkingContext.Builder#enableWasiNn}
+     * — the native enable-nn path would throw "WASI-NN support not compiled in"
+     * during {@link #instantiate(ai.tegmentum.webassembly4j.api.LinkingContext)}.
+     *
+     * <p>Reflection is used to keep {@code wasmtime4j-jni} at runtime scope in
+     * this provider's pom, matching pre-2.4.1 layering (Panama backend users
+     * can substitute the JNI implementation without a compile-time coupling).
+     */
+    @Override
+    public boolean supportsWasiNn() {
+        return WasiNnProbeHolder.AVAILABLE;
+    }
+
+    /** Reflection-lookup holder — computed once, then a constant boolean read. */
+    private static final class WasiNnProbeHolder {
+        private static final boolean AVAILABLE = probeNative();
+
+        private static boolean probeNative() {
+            try {
+                Class<?> cls = Class.forName("ai.tegmentum.wasmtime4j.jni.JniComponentLinker");
+                Object result = cls.getMethod("wasiNnAvailable").invoke(null);
+                return Boolean.TRUE.equals(result);
+            } catch (ReflectiveOperationException | LinkageError e) {
+                // JNI class missing (Panama-only classpath) or older wasmtime4j
+                // without the probe method — treat as no wasi:nn support so
+                // callers stay on the safe path.
+                return false;
+            }
+        }
+    }
+
     @Override
     public void close() {
         for (ai.tegmentum.wasmtime4j.Store s : stores) {

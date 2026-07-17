@@ -91,6 +91,20 @@ public interface Component extends AutoCloseable {
         return Optional.empty();
     }
 
+    /**
+     * @return {@code true} if this component's provider ships a native library
+     *         built with wasi:nn support. Callers should probe before configuring
+     *         a {@link LinkingContext} with
+     *         {@link DefaultLinkingContext.Builder#enableWasiNn(WasiNnConfig)};
+     *         a false return means {@link #instantiate(LinkingContext)} will
+     *         throw at wasi:nn linker-enable time. Default {@code false} so
+     *         providers that don't override see the safe (no-support) answer.
+     * @since 2.4.1
+     */
+    default boolean supportsWasiNn() {
+        return false;
+    }
+
     @Override
     void close();
 }

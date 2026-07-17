@@ -32,4 +32,17 @@ public interface LinkingContext {
     default WasiNnConfig wasiNnConfig() {
         return null;
     }
+
+    /**
+     * @return {@code true} if this linking context's provider ships a native
+     *         library built with wasi:nn support. Callers should probe before
+     *         invoking {@link DefaultLinkingContext.Builder#enableWasiNn(WasiNnConfig)};
+     *         a false return means enableWasiNn will throw at instantiation time.
+     *         Default {@code false} so providers that don't override see the safe
+     *         (no-support) answer.
+     * @since 2.4.1
+     */
+    default boolean supportsWasiNn() {
+        return false;
+    }
 }
