@@ -7,7 +7,7 @@
 
     <groupId>ai.tegmentum.webassembly4j</groupId>
     <artifactId>webassembly4j-parent</artifactId>
-    <version>2.4.0</version>
+    <version>2.4.1</version>
     <packaging>pom</packaging>
 
     <name>WebAssembly4J Parent</name>
@@ -63,7 +63,7 @@
 
         <!-- Dependency versions -->
         <junit.version>5.14.4</junit.version>
-        <wasmtime4j.version>46.0.1-1.4.0</wasmtime4j.version>
+        <wasmtime4j.version>46.0.1-1.4.2</wasmtime4j.version>
         <wamr4j.version>2.4.4-1.0.2</wamr4j.version>
         <endive.version>1.0.1</endive.version>
         <graalvm.version>24.2.2</graalvm.version>

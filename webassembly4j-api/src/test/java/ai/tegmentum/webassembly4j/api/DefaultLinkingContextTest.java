@@ -76,4 +76,16 @@ class DefaultLinkingContextTest {
                 () -> ctx.hostFunctions().add(new HostFunctionDefinition(
                         "m", "f", new ValueType[0], new ValueType[0], args -> null)));
     }
+
+    @Test
+    void supportsWasiNnDefaultsToFalse() {
+        // The provider-agnostic default is false — DefaultLinkingContext does not
+        // know which provider the caller will hand it to, so it can't report the
+        // (provider-specific) native truth. Providers that support wasi:nn override
+        // supportsWasiNn on their Component (e.g. WasmtimeComponentAdapter). This
+        // test pins the safe default so a caller that forgets to probe the actual
+        // provider gets a false answer and skips enableWasiNn.
+        LinkingContext ctx = DefaultLinkingContext.builder().build();
+        assertFalse(ctx.supportsWasiNn());
+    }
 }
