@@ -1,10 +1,12 @@
 package ai.tegmentum.webassembly4j.provider.wasmtime;
 
 import ai.tegmentum.wasmtime4j.wit.WitBool;
+import ai.tegmentum.wasmtime4j.wit.WitBorrow;
 import ai.tegmentum.wasmtime4j.wit.WitChar;
 import ai.tegmentum.wasmtime4j.wit.WitFloat32;
 import ai.tegmentum.wasmtime4j.wit.WitFloat64;
 import ai.tegmentum.wasmtime4j.wit.WitList;
+import ai.tegmentum.wasmtime4j.wit.WitOwn;
 import ai.tegmentum.wasmtime4j.wit.WitResource;
 import ai.tegmentum.wasmtime4j.wit.WitS16;
 import ai.tegmentum.wasmtime4j.wit.WitS32;
@@ -149,12 +151,26 @@ final class WasmtimeComponentInstanceAdapter implements ComponentInstance {
 
     @Override
     public WitCallableResource asCallableResource(Object resource) {
-        if (!(resource instanceof WitResource)) {
+        // The wasmtime WIT deserializer returns owned/borrowed resource handles as WitOwn /
+        // WitBorrow (discriminators 22/23), NOT WitResource — the latter is a higher-level
+        // convenience wrapper. The invokeResourceMethodWit / dropResource entry points on
+        // wasmtime4j's ComponentInstance want WitResource though, so translate here rather
+        // than making every caller do it (and rather than expanding WitCallableResource's
+        // input contract, which is intentionally provider-neutral).
+        final WitResource wr;
+        if (resource instanceof WitResource) {
+            wr = (WitResource) resource;
+        } else if (resource instanceof WitOwn) {
+            wr = WitResource.fromHandle(((WitOwn) resource).getHandle());
+        } else if (resource instanceof WitBorrow) {
+            wr = WitResource.fromHandle(((WitBorrow) resource).getHandle());
+        } else {
             throw new IllegalArgumentException(
-                    "Wasmtime provider expects a wasmtime4j WitResource; got "
+                    "Wasmtime provider expects a wasmtime4j WitResource / WitOwn / WitBorrow;"
+                            + " got "
                             + (resource == null ? "null" : resource.getClass().getName()));
         }
-        return new WasmtimeCallableResource((WitResource) resource, nativeInstance);
+        return new WasmtimeCallableResource(wr, nativeInstance);
     }
 
     @Override

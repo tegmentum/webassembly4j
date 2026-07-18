@@ -1,0 +1,13 @@
+package tegmentum:test-counter@0.1.0;
+
+interface counter-api {
+    resource counter {
+        constructor();
+        increment: func();
+        value: func() -> u32;
+    }
+}
+
+world counter-world {
+    export counter-api;
+}
