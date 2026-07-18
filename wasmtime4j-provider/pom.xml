@@ -44,4 +44,69 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Build the counter_component Rust component before tests run so
+                WasmtimeCallableResourceTest has a fresh artifact on the
+                classpath. Guarded by the `-Dskip.rust.build` and `-DskipTests`
+                escape hatches so CI environments without a Rust toolchain can
+                still build the JAR (the test itself is gated on runtime
+                availability via `@EnabledIf`).
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>build-counter-component</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>cargo</executable>
+                            <workingDirectory>${project.basedir}/src/test/rust/counter_component</workingDirectory>
+                            <arguments>
+                                <argument>component</argument>
+                                <argument>build</argument>
+                                <argument>--release</argument>
+                                <argument>--target</argument>
+                                <argument>wasm32-wasip2</argument>
+                            </arguments>
+                            <skip>${skip.rust.build}</skip>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-counter-component</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>cp</executable>
+                            <arguments>
+                                <argument>${project.basedir}/src/test/rust/counter_component/target/wasm32-wasip2/release/counter_component.wasm</argument>
+                                <argument>${project.basedir}/src/test/resources/counter_component.wasm</argument>
+                            </arguments>
+                            <skip>${skip.rust.build}</skip>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <properties>
+        <!--
+            Set to true to skip the counter_component Rust build (e.g. on CI
+            where a `cargo component` toolchain isn't installed). The already
+            checked-in counter_component.wasm under src/test/resources/ is
+            used as-is; the runtime test then verifies against whatever the
+            checked-in artifact represents.
+        -->
+        <skip.rust.build>false</skip.rust.build>
+    </properties>
 </project>
