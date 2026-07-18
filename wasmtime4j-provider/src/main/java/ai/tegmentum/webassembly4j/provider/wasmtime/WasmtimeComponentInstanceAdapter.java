@@ -5,6 +5,7 @@ import ai.tegmentum.wasmtime4j.wit.WitChar;
 import ai.tegmentum.wasmtime4j.wit.WitFloat32;
 import ai.tegmentum.wasmtime4j.wit.WitFloat64;
 import ai.tegmentum.wasmtime4j.wit.WitList;
+import ai.tegmentum.wasmtime4j.wit.WitResource;
 import ai.tegmentum.wasmtime4j.wit.WitS16;
 import ai.tegmentum.wasmtime4j.wit.WitS32;
 import ai.tegmentum.wasmtime4j.wit.WitS64;
@@ -17,6 +18,7 @@ import ai.tegmentum.webassembly4j.api.Function;
 import ai.tegmentum.webassembly4j.api.Global;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Table;
+import ai.tegmentum.webassembly4j.api.WitCallableResource;
 import ai.tegmentum.webassembly4j.api.exception.ExecutionException;
 import ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException;
 
@@ -143,6 +145,16 @@ final class WasmtimeComponentInstanceAdapter implements ComponentInstance {
                 + (arg == null ? "null" : arg.getClass().getName())
                 + " to a WIT value; build a WitValue explicitly "
                 + "(option/result/record/variant/enum/flags and null require an explicit type)");
+    }
+
+    @Override
+    public WitCallableResource asCallableResource(Object resource) {
+        if (!(resource instanceof WitResource)) {
+            throw new IllegalArgumentException(
+                    "Wasmtime provider expects a wasmtime4j WitResource; got "
+                            + (resource == null ? "null" : resource.getClass().getName()));
+        }
+        return new WasmtimeCallableResource((WitResource) resource, nativeInstance);
     }
 
     @Override
