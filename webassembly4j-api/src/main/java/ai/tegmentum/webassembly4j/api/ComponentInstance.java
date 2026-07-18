@@ -70,6 +70,32 @@ public interface ComponentInstance extends Instance {
     }
 
     /**
+     * Adopts a resource-shaped value returned from a prior {@link #invokeWit} call and
+     * returns a {@link WitCallableResource} bound to this instance, so method invocations
+     * on the resource can be written as {@code res.invokeMethod("m", args...)} rather than
+     * manually threading the receiver through {@link #invokeWit}.
+     *
+     * <p>The passed value must be the provider's WIT resource type (for wasmtime,
+     * {@code ai.tegmentum.wasmtime4j.wit.WitResource}). The returned handle owns the
+     * lifecycle: closing it drops the underlying store-side resource.
+     *
+     * <p>Default implementation throws — providers that host resources through a native
+     * store (currently only wasmtime4j) override.
+     *
+     * @param resource the provider-specific resource value (typically the return of an
+     *     {@link #invokeWit} call whose signature declared {@code own<T>})
+     * @return a callable handle bound to this instance
+     * @throws UnsupportedFeatureException if the provider does not host callable resources
+     * @throws IllegalArgumentException if {@code resource} is not of the provider's expected
+     *     resource type or has no native backing
+     * @since 2.4.0
+     */
+    default WitCallableResource asCallableResource(Object resource) {
+        throw new UnsupportedFeatureException(
+                "Provider does not host callable resources; wrap the receiver manually via invokeWit");
+    }
+
+    /**
      * Returns whether this instance exports a function with the given name.
      */
     boolean hasFunction(String name);
