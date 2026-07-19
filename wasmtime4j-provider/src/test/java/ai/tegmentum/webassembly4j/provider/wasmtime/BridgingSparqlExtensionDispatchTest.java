@@ -11,13 +11,20 @@ import ai.tegmentum.wasmtime4j.wit.WitList;
 import ai.tegmentum.wasmtime4j.wit.WitString;
 import ai.tegmentum.wasmtime4j.wit.WitU64;
 import ai.tegmentum.wasmtime4j.wit.WitValue;
+import ai.tegmentum.webassembly4j.api.Component;
 import ai.tegmentum.webassembly4j.api.ComponentInstance;
+import ai.tegmentum.webassembly4j.api.DefaultLinkingContext;
+import ai.tegmentum.webassembly4j.api.DefaultWasiContext;
+import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.Function;
 import ai.tegmentum.webassembly4j.api.Global;
 import ai.tegmentum.webassembly4j.api.Memory;
 import ai.tegmentum.webassembly4j.api.Table;
 import ai.tegmentum.webassembly4j.api.WitCallableResource;
 import ai.tegmentum.webassembly4j.api.exception.ExecutionException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 
 /**
  * Round-trip verification for {@link BridgingSparqlExtensionDispatch}. Constructs two fake
@@ -232,7 +240,84 @@ class BridgingSparqlExtensionDispatchTest {
                 "diagnostic should name both attempted paths; got: " + ex.getMessage());
     }
 
+    /**
+     * Regression: {@link ComponentInstance#hasFunction(String)} must agree with the invocation
+     * path on interface-qualified export names ({@code <package>:<interface>@<version>#<func>}).
+     *
+     * <p>Before the wasmtime4j fix this probe returned {@code false} for interface-scoped
+     * exports even when {@code invokeWit} of the same qualified name succeeded — which broke
+     * {@link BridgingSparqlExtensionDispatch#filterIsNewShape} at construction time (the
+     * constructor asked {@code hasFunction("tegmentum:webfunction/extension@0.1.0#call")} and
+     * always mis-detected new-shape guests as old-shape). Rather than reuse the webfunction
+     * artifact this test drives the counter component fixture that already backs the callable
+     * resource smoke test — it exports {@link #COUNTER_VALUE_METHOD} solely through the
+     * {@code counter-api} interface, so a passing probe here proves the qualified-name lookup
+     * on the underlying wasmtime4j {@code ComponentInstance} is fixed. A negative-control
+     * check on a fake export name guards against the "always returns true" failure mode.
+     */
+    @Test
+    @EnabledIf("runtimeAvailable")
+    @DisplayName("regression: hasFunction agrees with invokeWit on interface-qualified names")
+    void hasFunctionRecognizesInterfaceQualifiedExport() throws Exception {
+        final byte[] wasm = loadCounterComponent();
+        try (Engine engine = WasmtimeEngineAdapter.create(null);
+             Component component = engine.loadComponent(wasm)) {
+            final ComponentInstance instance = component.instantiate(wasiLinking());
+
+            assertTrue(
+                    instance.hasFunction(COUNTER_VALUE_METHOD),
+                    "hasFunction must recognize the interface-qualified export "
+                            + COUNTER_VALUE_METHOD
+                            + " that the counter guest exports only via counter-api; if this "
+                            + "regressed, BridgingSparqlExtensionDispatch#filterIsNewShape will "
+                            + "silently fall back to old-shape dispatch for new-shape guests");
+            assertTrue(
+                    instance.hasFunction(COUNTER_CTOR_EXPORT),
+                    "and it must also see the interface-scoped constructor export");
+            assertFalse(
+                    instance.hasFunction(
+                            "tegmentum:test-counter/counter-api@0.1.0#[method]counter.does-not-exist"),
+                    "sanity check: an unknown qualified name still returns false — otherwise the "
+                            + "fix would be masking every probe with an unconditional true");
+        }
+    }
+
     // --- helpers -------------------------------------------------------------------------
+
+    static boolean runtimeAvailable() {
+        return new WasmtimeProvider().availability().available();
+    }
+
+    private static final String COUNTER_INTERFACE =
+            "tegmentum:test-counter/counter-api@0.1.0";
+    private static final String COUNTER_CTOR_EXPORT =
+            COUNTER_INTERFACE + "#[constructor]counter";
+    private static final String COUNTER_VALUE_METHOD =
+            COUNTER_INTERFACE + "#[method]counter.value";
+
+    private static DefaultLinkingContext wasiLinking() {
+        return DefaultLinkingContext.builder()
+                .wasiContext(DefaultWasiContext.builder().build())
+                .build();
+    }
+
+    private static byte[] loadCounterComponent() throws IOException {
+        try (InputStream is =
+                BridgingSparqlExtensionDispatchTest.class.getResourceAsStream(
+                        "/counter_component.wasm")) {
+            assertNotNull(
+                    is,
+                    "counter_component.wasm not on classpath — the Maven build copies it into "
+                            + "src/test/resources/ from src/test/rust/counter_component/");
+            final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            final byte[] chunk = new byte[8192];
+            int n;
+            while ((n = is.read(chunk)) != -1) {
+                buf.write(chunk, 0, n);
+            }
+            return buf.toByteArray();
+        }
+    }
 
     private static List<WitValue> args(final WitValue... values) throws Exception {
         return Arrays.asList(values);
