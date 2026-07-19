@@ -229,6 +229,27 @@ final class WasmtimeComponentInstanceAdapter implements ComponentInstance {
     }
 
     @Override
+    public void consumeFuel(long amount) {
+        if (amount < 0L) {
+            throw new IllegalArgumentException("amount must be non-negative, got " + amount);
+        }
+        try {
+            nativeInstance.consumeFuel(amount);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ExecutionException("Failed to consume fuel: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public long fuelConsumed() {
+        try {
+            return nativeInstance.fuelConsumed();
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ExecutionException("Failed to read fuel consumed: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <T> Optional<T> unwrap(Class<T> nativeType) {
         if (nativeType.isInstance(nativeInstance)) {
