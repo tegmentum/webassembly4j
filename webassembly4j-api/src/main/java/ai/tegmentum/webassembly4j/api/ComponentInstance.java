@@ -157,4 +157,48 @@ public interface ComponentInstance extends Instance {
         throw new UnsupportedFeatureException(
                 "Concurrent component execution not supported");
     }
+
+    /**
+     * Decrement the underlying store's remaining fuel by {@code amount}.
+     *
+     * <p>Lets the host charge fuel against the same budget the guest consumes so a Java-side
+     * "toll" is enforced against real store fuel — the guest traps once the store is exhausted,
+     * just as if the fuel had been burned by wasm instructions. Complements
+     * {@link #fuelConsumed()}: what the host debits here shows up in the actual-consumed reading.
+     *
+     * <p>Providers whose engine is not fuel-metered (or that don't host a store per instance)
+     * throw {@link UnsupportedFeatureException} by default. Providers that support fuel override.
+     *
+     * @param amount the units of fuel to deduct (must be non-negative)
+     * @throws UnsupportedFeatureException if the provider does not support store-level fuel
+     *     accounting
+     * @throws IllegalArgumentException if {@code amount} is negative
+     * @throws ai.tegmentum.webassembly4j.api.exception.ExecutionException if the deduction
+     *     would exceed the currently-remaining fuel (no partial deduction) or the underlying
+     *     fuel operation fails
+     * @since 2.4.3
+     */
+    default void consumeFuel(long amount) {
+        throw new UnsupportedFeatureException(
+                "Provider does not support store-level fuel accounting");
+    }
+
+    /**
+     * Report the amount of fuel consumed against the store since its fuel was last set.
+     *
+     * <p>Set-fuel points are: instantiation (from the caller's fuel cap) and, for providers with
+     * per-call fuel resets, the start of each invocation. This method returns
+     * {@code baseline - remaining} relative to the most recent set-fuel — the actual fuel burned
+     * (wasm instructions plus any {@link #consumeFuel(long)} tolls) since then.
+     *
+     * <p>Providers whose engine is not fuel-metered return {@code -1} (unsupported sentinel).
+     * Providers that support fuel override.
+     *
+     * @return the fuel consumed since the last {@code set_fuel}, or {@code -1} when the provider
+     *     does not support store-level fuel accounting
+     * @since 2.4.3
+     */
+    default long fuelConsumed() {
+        return -1L;
+    }
 }
