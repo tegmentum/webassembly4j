@@ -51,6 +51,16 @@ public final class BridgingSparqlExtensionDispatch {
             "tegmentum:webfunction/extension@0.1.0#call";
 
     /**
+     * New-shape filter interface — the parent interface hosting {@link #NEW_SHAPE_FILTER_EXPORT}.
+     * Used as a shape-detection fallback for older wasmtime4j runtimes whose {@code hasFunction}
+     * probe doesn't recognize interface-qualified export names (fixed in wasmtime4j 46.0.1-1.4.6
+     * via commit 30f7fc5b, but downstream plugins on older wasmtime4j jars still hit the
+     * limitation).
+     */
+    static final String NEW_SHAPE_FILTER_INTERFACE =
+            "tegmentum:webfunction/extension@0.1.0";
+
+    /**
      * Old-shape filter call — a bare {@code evaluate} function exported at the guest world's root.
      */
     static final String OLD_SHAPE_FILTER_EXPORT = "evaluate";
@@ -61,6 +71,13 @@ public final class BridgingSparqlExtensionDispatch {
      */
     static final String NEW_SHAPE_AGGREGATE_CTOR =
             "tegmentum:webfunction/aggregate@0.1.0#new-aggregate";
+
+    /**
+     * New-shape aggregate interface — the parent interface hosting {@link
+     * #NEW_SHAPE_AGGREGATE_CTOR}. Same fallback rationale as {@link #NEW_SHAPE_FILTER_INTERFACE}.
+     */
+    static final String NEW_SHAPE_AGGREGATE_INTERFACE =
+            "tegmentum:webfunction/aggregate@0.1.0";
 
     /**
      * New-shape aggregate methods. The plugin-side driver calls {@code step} and {@code finish}
@@ -99,8 +116,20 @@ public final class BridgingSparqlExtensionDispatch {
      */
     public BridgingSparqlExtensionDispatch(final ComponentInstance instance) {
         this.instance = Objects.requireNonNull(instance, "instance");
-        this.filterIsNewShape = instance.hasFunction(NEW_SHAPE_FILTER_EXPORT);
-        this.aggregateIsNewShape = instance.hasFunction(NEW_SHAPE_AGGREGATE_CTOR);
+        // Detection: try the qualified-export probe first (fast, exact — a passing
+        // `hasFunction` guarantees the invocation path will succeed). Fall back to
+        // `exportsInterface` when it misses — on wasmtime4j runtimes older than
+        // 46.0.1-1.4.6 the qualified-name probe returns false even when the export
+        // is present, so without the interface-level fallback new-shape guests get
+        // mis-detected as old-shape and dispatch traps on absent flat exports. The
+        // filter side has carried this fallback at the plugin layer since the
+        // limitation was diagnosed; hoisting it into the bridging helper lets the
+        // aggregate side (which the plugins do not work around) reach new-shape
+        // guests too, and lets the plugin-side filter workaround retire.
+        this.filterIsNewShape = detectNewShape(
+                instance, NEW_SHAPE_FILTER_EXPORT, NEW_SHAPE_FILTER_INTERFACE);
+        this.aggregateIsNewShape = detectNewShape(
+                instance, NEW_SHAPE_AGGREGATE_CTOR, NEW_SHAPE_AGGREGATE_INTERFACE);
         if (LOG.isLoggable(Level.FINE)) {
             LOG.log(
                     Level.FINE,
@@ -194,11 +223,64 @@ public final class BridgingSparqlExtensionDispatch {
     public WitCallableResource newAggregate(final String aggregateName) {
         Objects.requireNonNull(aggregateName, "aggregateName");
         if (aggregateIsNewShape) {
+            // new-aggregate: func(name: string) -> result<aggregate-state, string>.
+            // The wire return is a WitResult; asCallableResource wants the ok-arm
+            // resource handle directly (a WitOwn/WitBorrow/WitResource, per the
+            // provider adapter's contract). Unwrap here so callers don't have to
+            // know the ctor is result-typed — the shim's error surface stays a
+            // plain ExecutionException carrying the guest's error message.
             final Object handle = instance.invokeWit(
                     NEW_SHAPE_AGGREGATE_CTOR, witString(aggregateName));
-            return instance.asCallableResource(handle);
+            final WitCallableResource raw =
+                    instance.asCallableResource(unwrapResultOk(handle, NEW_SHAPE_AGGREGATE_CTOR));
+            // Wrap so callers can dispatch with the neutral method names
+            // ("step"/"finish") the shim also accepts — the wasmtime resource
+            // machinery underneath wants the fully-qualified WIT method export
+            // name and doesn't know about the neutral vocabulary.
+            return new NeutralMethodNameResource(raw);
         }
         return new ShimAggregateResource(instance);
+    }
+
+    /**
+     * Unwrap the ok arm of a {@link ai.tegmentum.wasmtime4j.wit.WitResult}. Non-result values pass
+     * through unchanged — old-shape or degenerate guest returns don't get wrapped in a result on
+     * the wire, and this method is only load-bearing on the new-shape ctor path where the WIT
+     * signature ({@code result<aggregate-state, string>}) forces the wrapper. An err arm becomes
+     * an {@link ExecutionException} carrying the guest's message; a null/absent ok payload throws
+     * the same to name the export that surfaced the empty result.
+     */
+    private static Object unwrapResultOk(final Object handle, final String exportName) {
+        if (!(handle instanceof ai.tegmentum.wasmtime4j.wit.WitResult)) {
+            return handle;
+        }
+        final ai.tegmentum.wasmtime4j.wit.WitResult wr =
+                (ai.tegmentum.wasmtime4j.wit.WitResult) handle;
+        if (wr.isErr()) {
+            final String message = wr.getErr()
+                    .map(v -> v instanceof WitString ? ((WitString) v).getValue() : v.toString())
+                    .orElse("component returned err with no payload");
+            throw new ExecutionException(exportName + " returned err: " + message);
+        }
+        return wr.getOk().orElseThrow(() -> new ExecutionException(
+                exportName + " returned ok with no payload"));
+    }
+
+    /**
+     * Shape-detection helper. Returns true when the guest exports the new-shape entry either
+     * as a qualified function ({@code hasFunction}) or transitively via its containing WIT
+     * interface ({@code exportsInterface}).
+     *
+     * <p>The two probes are not redundant: {@code hasFunction} is the exact answer but requires
+     * wasmtime4j 46.0.1-1.4.6+ to recognize interface-qualified names, and downstream plugins
+     * pin older wasmtime4j jars in ways this helper cannot control. {@code exportsInterface}
+     * catches every case where the qualified probe misses.
+     */
+    private static boolean detectNewShape(
+            final ComponentInstance instance,
+            final String qualifiedExport,
+            final String interfaceName) {
+        return instance.hasFunction(qualifiedExport) || instance.exportsInterface(interfaceName);
     }
 
     /**
@@ -256,6 +338,58 @@ public final class BridgingSparqlExtensionDispatch {
                 "Neither new-shape export '" + newShapePath
                         + "' nor old-shape export '" + oldShapePath
                         + "' is present on the component instance");
+    }
+
+    /**
+     * Adapter over a real wasmtime {@link WitCallableResource} that also accepts the neutral
+     * method names ({@code "step"} / {@code "finish"}) the {@link ShimAggregateResource} accepts.
+     * Translates them to the fully qualified WIT method-export paths
+     * ({@link #NEW_SHAPE_AGGREGATE_STEP} / {@link #NEW_SHAPE_AGGREGATE_FINISH}) that
+     * {@code invokeResourceMethodWit} expects on wasmtime. Fully-qualified names pass through
+     * unchanged so a caller that isn't going through the bridging vocabulary still works.
+     */
+    static final class NeutralMethodNameResource implements WitCallableResource {
+
+        private final WitCallableResource delegate;
+
+        NeutralMethodNameResource(final WitCallableResource delegate) {
+            this.delegate = Objects.requireNonNull(delegate, "delegate");
+        }
+
+        @Override
+        public String resourceTypeName() {
+            return delegate.resourceTypeName();
+        }
+
+        @Override
+        public Object invokeMethod(final String methodExportName, final Object... args) {
+            return delegate.invokeMethod(translate(methodExportName), args);
+        }
+
+        @Override
+        public Object invokeMethodWit(final String methodExportName, final Object... args) {
+            return delegate.invokeMethodWit(translate(methodExportName), args);
+        }
+
+        private static String translate(final String methodExportName) {
+            if (SHIM_METHOD_STEP.equals(methodExportName)) {
+                return NEW_SHAPE_AGGREGATE_STEP;
+            }
+            if (SHIM_METHOD_FINISH.equals(methodExportName)) {
+                return NEW_SHAPE_AGGREGATE_FINISH;
+            }
+            return methodExportName;
+        }
+
+        @Override
+        public boolean isClosed() {
+            return delegate.isClosed();
+        }
+
+        @Override
+        public void close() {
+            delegate.close();
+        }
     }
 
     /**
