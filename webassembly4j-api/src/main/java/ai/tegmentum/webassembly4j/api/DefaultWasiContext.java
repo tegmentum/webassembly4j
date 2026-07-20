@@ -18,13 +18,15 @@ public final class DefaultWasiContext implements WasiContext {
     private final Map<String, String> preopenGuestPaths;
     private final boolean allowNetwork;
     private final List<NetworkEgressRule> egressRules;
+    private final boolean wasiHttpEnabled;
 
     private DefaultWasiContext(List<String> args, Map<String, String> env,
                                 boolean inheritStdin, boolean inheritStdout,
                                 boolean inheritStderr, List<String> preopenDirs,
                                 List<String> readOnlyPreopenDirs,
                                 Map<String, String> preopenGuestPaths,
-                                boolean allowNetwork, List<NetworkEgressRule> egressRules) {
+                                boolean allowNetwork, List<NetworkEgressRule> egressRules,
+                                boolean wasiHttpEnabled) {
         this.args = Collections.unmodifiableList(new ArrayList<>(args));
         this.env = Collections.unmodifiableMap(new LinkedHashMap<>(env));
         this.inheritStdin = inheritStdin;
@@ -37,6 +39,7 @@ public final class DefaultWasiContext implements WasiContext {
                 Collections.unmodifiableMap(new LinkedHashMap<>(preopenGuestPaths));
         this.allowNetwork = allowNetwork;
         this.egressRules = Collections.unmodifiableList(new ArrayList<>(egressRules));
+        this.wasiHttpEnabled = wasiHttpEnabled;
     }
 
     @Override
@@ -89,6 +92,11 @@ public final class DefaultWasiContext implements WasiContext {
         return egressRules;
     }
 
+    @Override
+    public boolean wasiHttpEnabled() {
+        return wasiHttpEnabled;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -105,6 +113,7 @@ public final class DefaultWasiContext implements WasiContext {
         private final Map<String, String> preopenGuestPaths = new LinkedHashMap<>();
         private boolean allowNetwork;
         private final List<NetworkEgressRule> egressRules = new ArrayList<>();
+        private boolean wasiHttpEnabled;
 
         private Builder() {
         }
@@ -190,10 +199,20 @@ public final class DefaultWasiContext implements WasiContext {
             return this;
         }
 
+        /**
+         * Ask the provider to publish the {@code wasi:http} import surface for this instantiation.
+         * Default {@code false}. Publishing the imports does not by itself grant network access — the
+         * usual {@link #allowNetwork(boolean)} / egress rules still gate what the guest can reach.
+         */
+        public Builder wasiHttp(boolean enable) {
+            this.wasiHttpEnabled = enable;
+            return this;
+        }
+
         public DefaultWasiContext build() {
             return new DefaultWasiContext(args, env, inheritStdin, inheritStdout,
                     inheritStderr, preopenDirs, readOnlyPreopenDirs, preopenGuestPaths,
-                    allowNetwork, egressRules);
+                    allowNetwork, egressRules, wasiHttpEnabled);
         }
     }
 }
