@@ -79,4 +79,21 @@ public interface WasiContext {
     default Optional<FsAccessObserver> fsAccessObserver() {
         return Optional.empty();
     }
+
+    /**
+     * Whether the {@code wasi:http/outgoing-handler + types} import surface should be published on the
+     * component linker for this instantiation. Default {@code false}: no behavioural change for existing
+     * embedders. When {@code true}, a provider that supports {@code wasi:http} enables the surface so a
+     * guest that imports {@code wasi:http/outgoing-handler} can instantiate without a bespoke host call;
+     * providers that do not support {@code wasi:http} may either surface {@link
+     * ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException} or silently no-op (documented
+     * per-provider).
+     *
+     * <p>This flag only <em>publishes the imports</em>. It does not itself grant network egress — the
+     * provider's usual {@link #allowNetwork()} / {@link #egressRules()} gates still apply to any HTTP
+     * connection the guest attempts.
+     */
+    default boolean wasiHttpEnabled() {
+        return false;
+    }
 }
