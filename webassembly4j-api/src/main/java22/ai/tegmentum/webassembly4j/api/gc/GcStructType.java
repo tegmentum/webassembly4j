@@ -27,6 +27,15 @@ public final class GcStructType {
             Objects.requireNonNull(type, "type");
         }
 
+        /**
+         * Alias for {@link #mutable()} preserved for binary compatibility with the
+         * base-release class variant, whose accessor is named {@code isMutable()}.
+         * Consumers compiled against the base variant call {@code isMutable()};
+         * without this method the java22 record overlay throws
+         * {@link NoSuchMethodError} at runtime on Java 22+ JVMs.
+         */
+        public boolean isMutable() { return mutable; }
+
         @Override
         public String toString() {
             return (name != null ? name : "<unnamed>") + ": " + type + (mutable ? " (mut)" : "");
