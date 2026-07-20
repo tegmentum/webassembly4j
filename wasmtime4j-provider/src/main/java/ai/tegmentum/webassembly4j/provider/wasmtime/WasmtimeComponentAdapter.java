@@ -255,6 +255,13 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
                     (path, operation, reason, errorCode) ->
                             neutral.onDenied(path, operation, reason, errorCode));
         }
+        // wasi:http opt-in: forward the framework-neutral flag to wasmtime4j's WasiPreview2Config,
+        // which drives ComponentLinker.enableWasiHttp() after preview 2 is enabled. Default off;
+        // publishing the imports does not itself grant egress — the network egress rules above still
+        // gate what the guest can reach.
+        if (wasi.wasiHttpEnabled()) {
+            b.wasiHttp(true);
+        }
         return b.build();
     }
 
