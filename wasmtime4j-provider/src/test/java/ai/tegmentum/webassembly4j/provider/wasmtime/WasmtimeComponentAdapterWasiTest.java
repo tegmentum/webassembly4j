@@ -61,5 +61,31 @@ class WasmtimeComponentAdapterWasiTest {
         assertTrue(cfg.getPreopenDirs().isEmpty());
         assertFalse(cfg.isAllowNetwork());
         assertFalse(cfg.isInheritStdout());
+        assertFalse(cfg.isWasiHttp(), "wasi:http must default off");
+    }
+
+    @Test
+    @DisplayName("WasiContext.wasiHttp(true) is forwarded to WasiPreview2Config.isWasiHttp()")
+    void forwardsWasiHttpEnabled() {
+        DefaultWasiContext wasi = DefaultWasiContext.builder().wasiHttp(true).build();
+
+        WasiPreview2Config cfg = WasmtimeComponentAdapter.toWasiPreview2Config(wasi);
+
+        assertTrue(cfg.isWasiHttp(),
+                "wasiHttpEnabled=true on WasiContext must forward to WasiPreview2Config.isWasiHttp()");
+        // Publishing the imports is orthogonal to network-egress: the flag alone must not open the
+        // network. Callers must still opt in via allowNetwork + egressRules.
+        assertFalse(cfg.isAllowNetwork(),
+                "wasi:http opt-in must not implicitly grant network egress");
+    }
+
+    @Test
+    @DisplayName("WasiContext.wasiHttp(false) leaves the flag off")
+    void wasiHttpFalseIsForwarded() {
+        DefaultWasiContext wasi = DefaultWasiContext.builder().wasiHttp(false).build();
+
+        WasiPreview2Config cfg = WasmtimeComponentAdapter.toWasiPreview2Config(wasi);
+
+        assertFalse(cfg.isWasiHttp());
     }
 }
