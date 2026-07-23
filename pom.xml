@@ -52,6 +52,7 @@
         <module>webassembly4j-benchmarks</module>
         <module>webassembly4j-bindgen</module>
         <module>webassembly4j-component-builder</module>
+        <module>wasmos-embedder-generated</module>
     </modules>
 
     <properties>
