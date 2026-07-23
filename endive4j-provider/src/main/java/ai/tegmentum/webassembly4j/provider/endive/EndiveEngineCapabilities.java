@@ -11,7 +11,9 @@ final class EndiveEngineCapabilities implements EngineCapabilities {
 
     @Override
     public boolean supportsComponents() {
-        return false;
+        // Component Model is layered in via wasmcm_runtime_guest.wasm; concretely
+        // available whenever the guest blob is resolvable at loadComponent time.
+        return WasmcmGuestBlobLocator.locateOrNull() != null;
     }
 
     @Override
