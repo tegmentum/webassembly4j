@@ -60,10 +60,17 @@ import org.junit.jupiter.api.io.TempDir;
  * <ol>
  *   <li>Runs {@link CodeGenerator} against the fixture copy of {@code
  *       embedder.wit} (kept under {@code src/test/resources/wasmos-embedder/}).
- *       Implementation classes are disabled because {@code
- *       ImplementationCodeGenerator} generates broken marshalling glue for the
- *       {@code hostCall} shape (the parameter-name / local-variable collision
- *       is a pre-existing bug in that generator, unrelated to this shape).
+ *       Implementation classes are disabled here because the generated
+ *       {@code *Impl} bodies reference the {@code webassembly4j-api} and
+ *       {@code webassembly4j-runtime} types (Instance / Module / Engine /
+ *       Function / MarshalContext) which aren't test dependencies of the
+ *       bindgen module. The generator-level bugs the impl bodies used to hit
+ *       (parameter/local collision on {@code args}, comment-in-return for
+ *       {@code result<T, E>}) are covered by
+ *       {@link ai.tegmentum.webassembly4j.bindgen.generator.ImplementationCodeGeneratorBugsTest},
+ *       which compiles the generated Impl against inline stubs of those
+ *       types. A full impl-on shape check is a separate wiring task
+ *       (test-scope coupling to the api/runtime modules).
  *   <li>Asserts each file in the expected surface exists and contains the
  *       right members.
  *   <li>Feeds every generated file to the platform {@link JavaCompiler} and

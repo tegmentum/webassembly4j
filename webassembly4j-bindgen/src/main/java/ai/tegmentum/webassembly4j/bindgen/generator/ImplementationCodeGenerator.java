@@ -38,8 +38,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import javax.lang.model.element.Modifier;
 
 /**
@@ -335,14 +337,54 @@ public final class ImplementationCodeGenerator {
   private void generateMarshallingBody(MethodSpec.Builder method, BindgenFunction function,
                                         String fieldName, TypeName returnType, boolean hasReturn) {
     BindgenType returnBindgenType = hasReturn ? function.getReturnType().get() : null;
+
+    // TODO(bindgen): result<T, E> return marshalling requires a Canonical-ABI
+    // discriminant lift (tag byte followed by either ok- or err-payload
+    // slots) that MarshallingStrategy#liftReturn doesn't emit today — the
+    // default arm of that switch produces the literal `/* TODO: lift RESULT */`,
+    // which is a comment, not an expression, so `return <that>;` will not
+    // compile. Until the discriminant lift lands (ADR-005 resource/result
+    // codegen), emit a throw so the class stays compileable and the impl can
+    // be wired up incrementally. Parameters, return type, and the resource /
+    // interface shape are correct; only the body is a placeholder.
+    if (returnBindgenType != null && returnBindgenType.getKind() == BindgenType.Kind.RESULT) {
+      method.addStatement(
+          "throw new $T($S)",
+          UnsupportedOperationException.class,
+          "TODO(bindgen): result<T,E> marshalling not yet wired for "
+              + function.getName()
+              + " — see MarshallingStrategy#liftReturn");
+      return;
+    }
+
     boolean complexReturn = MarshallingStrategy.requiresMarshalling(returnBindgenType);
 
-    method.addStatement("java.util.List<Object> args = new java.util.ArrayList<>()");
+    // The marshalling body used to hard-code the local names `args`,
+    // `retptr`, and `result`. Any WIT function that happens to declare a
+    // parameter with one of those names (`embedder-callbacks.host-call` in
+    // wasmos:host/embedder does exactly this for `args: list<u8>`) collided
+    // with the redeclared local and javac rejected the generated file
+    // (`variable args is already defined`). Compute a fresh name for every
+    // internal local against the parameter set. `$` cannot appear in a
+    // JavaNaming-produced parameter name so the disambiguated form is
+    // guaranteed unique.
+    Set<String> reserved = new HashSet<>();
+    for (BindgenParameter param : function.getParameters()) {
+      reserved.add(JavaNaming.toParameterName(param.getName()));
+    }
+    String argsLocal = uniqueLocalName("args", reserved);
+    reserved.add(argsLocal);
+    String retptrLocal = uniqueLocalName("retptr", reserved);
+    reserved.add(retptrLocal);
+    String resultLocal = uniqueLocalName("result", reserved);
+    reserved.add(resultLocal);
+
+    method.addStatement("java.util.List<Object> $L = new java.util.ArrayList<>()", argsLocal);
 
     // Allocate return pointer for complex returns
     if (complexReturn) {
-      method.addStatement("int retptr = marshal.allocator().allocate(8, 4)");
-      method.addStatement("args.add(retptr)");
+      method.addStatement("int $L = marshal.allocator().allocate(8, 4)", retptrLocal);
+      method.addStatement("$L.add($L)", argsLocal, retptrLocal);
     }
 
     // Lower each parameter
@@ -351,28 +393,49 @@ public final class ImplementationCodeGenerator {
       BindgenType paramType = param.getType();
 
       if (MarshallingStrategy.requiresMarshalling(paramType)) {
-        method.addCode(MarshallingStrategy.lowerArgument(paramType, paramName, "args"));
+        method.addCode(MarshallingStrategy.lowerArgument(paramType, paramName, argsLocal));
       } else {
-        method.addStatement("args.add($L)", paramName);
+        method.addStatement("$L.add($L)", argsLocal, paramName);
       }
     }
 
     // Invoke
     if (!hasReturn || complexReturn) {
-      method.addStatement("$L.invoke(args.toArray())", fieldName);
+      method.addStatement("$L.invoke($L.toArray())", fieldName, argsLocal);
     } else {
-      method.addStatement("Object result = $L.invoke(args.toArray())", fieldName);
+      method.addStatement("Object $L = $L.invoke($L.toArray())", resultLocal, fieldName, argsLocal);
     }
 
     // Lift return
     if (hasReturn) {
       if (complexReturn) {
-        CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, "retptr");
+        CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, retptrLocal);
         method.addStatement("return $L", liftCode);
       } else {
-        CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, "result");
+        CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, resultLocal);
         method.addStatement("return $L", liftCode);
       }
+    }
+  }
+
+  /**
+   * Pick a Java local-variable name that starts with {@code desired} and does
+   * not appear in {@code reserved}. Disambiguation uses a {@code $}-separated
+   * numeric suffix, which cannot appear in a name produced by
+   * {@link JavaNaming#toParameterName(String)} — so the returned name is
+   * guaranteed distinct from every generated parameter identifier.
+   */
+  private static String uniqueLocalName(String desired, Set<String> reserved) {
+    if (!reserved.contains(desired)) {
+      return desired;
+    }
+    int suffix = 0;
+    while (true) {
+      String candidate = desired + "$" + suffix;
+      if (!reserved.contains(candidate)) {
+        return candidate;
+      }
+      suffix++;
     }
   }
 

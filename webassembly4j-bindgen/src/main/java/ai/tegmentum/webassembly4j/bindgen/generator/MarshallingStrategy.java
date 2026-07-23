@@ -119,11 +119,15 @@ public final class MarshallingStrategy {
   /**
    * Generates code to lift a WASM return value to a Java value.
    *
+   * <p>For primitives and enums {@code valueVar} names the {@code Object}
+   * returned by {@code Function.invoke}; for complex types it names the
+   * return-pointer local in linear memory.
+   *
    * @param type the bindgen type
-   * @param retptrVar the variable name holding the return pointer in linear memory
+   * @param valueVar the variable name (result Object, or retptr for complex types)
    * @return the lifting code block (an expression)
    */
-  public static CodeBlock liftReturn(BindgenType type, String retptrVar) {
+  public static CodeBlock liftReturn(BindgenType type, String valueVar) {
     if (type == null) {
       return CodeBlock.of("null");
     }
@@ -131,12 +135,12 @@ public final class MarshallingStrategy {
     switch (type.getKind()) {
       case PRIMITIVE:
         if ("string".equals(type.getName())) {
-          return CodeBlock.of("marshal.reader().readString($L)", retptrVar);
+          return CodeBlock.of("marshal.reader().readString($L)", valueVar);
         }
-        return liftPrimitive(type);
+        return liftPrimitive(type, valueVar);
 
       case LIST:
-        return CodeBlock.of("marshal.reader().readBytes($L)", retptrVar);
+        return CodeBlock.of("marshal.reader().readBytes($L)", valueVar);
 
       case ENUM:
         return CodeBlock.of("/* TODO: lift enum from ordinal */");
@@ -148,34 +152,37 @@ public final class MarshallingStrategy {
 
   /**
    * Generates code to lift a primitive WASM return value.
+   *
+   * @param type the primitive bindgen type
+   * @param resultVar the local variable holding the boxed {@code Object} returned by invoke
    */
-  private static CodeBlock liftPrimitive(BindgenType type) {
+  private static CodeBlock liftPrimitive(BindgenType type, String resultVar) {
     String name = type.getName().toLowerCase();
     switch (name) {
       case "bool":
-        return CodeBlock.of("((($T) result).intValue() != 0)", Number.class);
+        return CodeBlock.of("((($T) $L).intValue() != 0)", Number.class, resultVar);
       case "s8":
       case "u8":
-        return CodeBlock.of("(($T) result).byteValue()", Number.class);
+        return CodeBlock.of("(($T) $L).byteValue()", Number.class, resultVar);
       case "s16":
       case "u16":
-        return CodeBlock.of("(($T) result).shortValue()", Number.class);
+        return CodeBlock.of("(($T) $L).shortValue()", Number.class, resultVar);
       case "s32":
       case "u32":
       case "i32":
-        return CodeBlock.of("(($T) result).intValue()", Number.class);
+        return CodeBlock.of("(($T) $L).intValue()", Number.class, resultVar);
       case "s64":
       case "u64":
       case "i64":
-        return CodeBlock.of("(($T) result).longValue()", Number.class);
+        return CodeBlock.of("(($T) $L).longValue()", Number.class, resultVar);
       case "f32":
       case "float32":
-        return CodeBlock.of("(($T) result).floatValue()", Number.class);
+        return CodeBlock.of("(($T) $L).floatValue()", Number.class, resultVar);
       case "f64":
       case "float64":
-        return CodeBlock.of("(($T) result).doubleValue()", Number.class);
+        return CodeBlock.of("(($T) $L).doubleValue()", Number.class, resultVar);
       default:
-        return CodeBlock.of("result");
+        return CodeBlock.of("$L", resultVar);
     }
   }
 }
