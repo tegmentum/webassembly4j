@@ -17,6 +17,37 @@
     <name>WebAssembly4J Endive Provider</name>
     <description>Endive pure-Java engine provider for WebAssembly4J</description>
 
+    <build>
+        <plugins>
+            <!--
+                Point the wasmcm runtime guest lookup at the sibling wasm-cm checkout
+                for integration tests; production callers set -Dwasmcm.runtime.guest.wasm
+                themselves or ship the blob on the classpath. Tests that need the guest
+                skip cleanly when the property isn't resolvable.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <wasmcm.runtime.guest.wasm>${wasmcm.runtime.guest.wasm.path}</wasmcm.runtime.guest.wasm>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <properties>
+        <!--
+            Absolute path to wasmcm_runtime_guest.wasm; defaults to the sibling
+            wasm-cm checkout every developer maintains next to this repo. Override
+            with -Dwasmcm.runtime.guest.wasm.path=... to run tests against a
+            different guest blob.
+        -->
+        <wasmcm.runtime.guest.wasm.path>${user.home}/git/wasm-cm/target/wasm32-unknown-unknown/release/wasmcm_runtime_guest.wasm</wasmcm.runtime.guest.wasm.path>
+        <wasmcm-endive-adapter.version>0.1.0-SNAPSHOT</wasmcm-endive-adapter.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>ai.tegmentum.webassembly4j</groupId>
@@ -38,6 +69,19 @@
             <groupId>run.endive</groupId>
             <artifactId>compiler</artifactId>
             <optional>true</optional>
+        </dependency>
+        <!--
+            Layered Component Model support: this provider embeds the portable
+            wasmcm_runtime_guest.wasm (see ~/git/wasm-cm) inside a companion Endive
+            instance, and reuses the Java-side loader / adapter published by the
+            wasm-cm tree. The dependency is a SNAPSHOT until the wasm-cm module
+            is versioned; run `mvn install` inside ~/git/wasm-cm/adapters/endive
+            once to prime the local Maven repository.
+        -->
+        <dependency>
+            <groupId>run.tegmentum.wasmcm</groupId>
+            <artifactId>wasmcm-endive-adapter</artifactId>
+            <version>${wasmcm-endive-adapter.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

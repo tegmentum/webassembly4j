@@ -11,6 +11,7 @@ import ai.tegmentum.webassembly4j.api.exception.ValidationException;
 import ai.tegmentum.webassembly4j.provider.endive.config.EndiveConfig;
 import run.endive.wasm.Parser;
 import run.endive.wasm.WasmModule;
+import run.tegmentum.wasmcm.endive.WasmcmRuntimeGuestLoader;
 
 import java.util.Optional;
 import java.util.function.Function;
@@ -68,8 +69,24 @@ final class EndiveEngineAdapter implements Engine {
 
     @Override
     public Component loadComponent(byte[] bytes) {
-        throw new UnsupportedFeatureException(
-                "Component model is not supported by Endive");
+        byte[] guestWasm = WasmcmGuestBlobLocator.locateOrNull();
+        if (guestWasm == null) {
+            throw new UnsupportedFeatureException(
+                    "Component Model support requires wasmcm_runtime_guest.wasm; provide it via "
+                            + WasmcmGuestBlobLocator.describeLookupOrder());
+        }
+        try {
+            WasmcmRuntimeGuestLoader loader = new WasmcmRuntimeGuestLoader(guestWasm);
+            long componentHandle = loader.parseComponent(bytes);
+            return new EndiveComponentAdapter(loader, componentHandle, true);
+        } catch (IllegalStateException e) {
+            throw new ValidationException(
+                    "Failed to parse Component Model binary through wasmcm runtime guest: "
+                            + e.getMessage(),
+                    e);
+        } catch (RuntimeException e) {
+            throw new ValidationException("Failed to load Component Model binary", e);
+        }
     }
 
     @Override
