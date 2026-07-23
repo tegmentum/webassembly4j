@@ -193,7 +193,9 @@ public final class CodeGenerator {
         final WitInterfaceParser parser = new WitInterfaceParser();
         final WitInterfaceDefinition definition = parser.parseInterface(reconstructed, packageName);
 
-        final Map<String, BindgenType> convertedTypes = new HashMap<>();
+        // LinkedHashMap preserves WIT declaration order for cross-JVM
+    // deterministic generation. See WitInterfaceParser.parseTypes.
+    final Map<String, BindgenType> convertedTypes = new java.util.LinkedHashMap<>();
         for (final Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
           BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
           if (bindgenType.getKind() == BindgenType.Kind.RESOURCE
@@ -221,15 +223,31 @@ public final class CodeGenerator {
           convertedFunctions.add(bindgenFunc);
         }
 
-        final BindgenInterface.Builder ifaceBuilder =
-            BindgenInterface.builder().name(definition.getName()).packageName(packageName);
-        for (final BindgenFunction func : convertedFunctions) {
-          ifaceBuilder.addFunction(func);
+        if (pre.isWorld()) {
+          // A hoisted `world X { ... }` block declares types + resources at
+          // the top level (per ADR-006). It has no functions of its own —
+          // its `import`/`export` clauses reference already-declared
+          // interfaces. Emit the types as top-level model types so the
+          // generator produces one Java file per type/resource without an
+          // empty carrier interface. Any function that did slip in gets
+          // added as a top-level function.
+          for (final BindgenType type : convertedTypes.values()) {
+            modelBuilder.addType(type);
+          }
+          for (final BindgenFunction func : convertedFunctions) {
+            modelBuilder.addFunction(func);
+          }
+        } else {
+          final BindgenInterface.Builder ifaceBuilder =
+              BindgenInterface.builder().name(definition.getName()).packageName(packageName);
+          for (final BindgenFunction func : convertedFunctions) {
+            ifaceBuilder.addFunction(func);
+          }
+          for (final BindgenType type : convertedTypes.values()) {
+            ifaceBuilder.addType(type);
+          }
+          modelBuilder.addInterface(ifaceBuilder.build());
         }
-        for (final BindgenType type : convertedTypes.values()) {
-          ifaceBuilder.addType(type);
-        }
-        modelBuilder.addInterface(ifaceBuilder.build());
       }
 
       return modelBuilder.build();
@@ -249,7 +267,9 @@ public final class CodeGenerator {
     final BindgenModel.Builder modelBuilder =
         BindgenModel.builder().name(definition.getName()).sourceFile(witPath.toString());
 
-    final Map<String, BindgenType> convertedTypes = new HashMap<>();
+    // LinkedHashMap preserves WIT declaration order for cross-JVM
+    // deterministic generation. See WitInterfaceParser.parseTypes.
+    final Map<String, BindgenType> convertedTypes = new java.util.LinkedHashMap<>();
     for (final Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
       final BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
       convertedTypes.put(entry.getKey(), bindgenType);

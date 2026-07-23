@@ -146,7 +146,12 @@ public final class WitInterfaceParser {
    * @throws BindgenException if parsing fails
    */
   private Map<String, WitType> parseTypes(final String interfaceBody) throws BindgenException {
-    final Map<String, WitType> types = new HashMap<>();
+    // LinkedHashMap for cross-JVM-deterministic type ordering — see
+    // parseFunctions for the same reasoning. Downstream generators iterate
+    // this map to emit `.java` files; a randomized order would surface as
+    // reshuffled inner-type declaration order in generated code between
+    // invocations.
+    final Map<String, WitType> types = new java.util.LinkedHashMap<>();
 
     // Pass 1: standalone declarations (`record name { ... }`,
     // `variant name { ... }`, `enum name { ... }`,
@@ -309,7 +314,8 @@ public final class WitInterfaceParser {
    */
   private WitType parseRecordType(final String typeName, final String fieldsText)
       throws BindgenException {
-    final Map<String, WitType> fields = new HashMap<>();
+    // LinkedHashMap for deterministic field order in generated records.
+    final Map<String, WitType> fields = new java.util.LinkedHashMap<>();
     final List<String> fieldDefs = splitTopLevel(stripComments(fieldsText), ',');
 
     for (final String fieldDef : fieldDefs) {
@@ -424,7 +430,9 @@ public final class WitInterfaceParser {
    */
   private WitType parseVariantType(final String typeName, final String casesText)
       throws BindgenException {
-    final Map<String, Optional<WitType>> cases = new HashMap<>();
+    // LinkedHashMap for deterministic case order in generated sealed
+    // interfaces.
+    final Map<String, Optional<WitType>> cases = new java.util.LinkedHashMap<>();
     final List<String> caseDefs = splitTopLevel(stripComments(casesText), ',');
 
     for (final String caseDef : caseDefs) {
@@ -539,7 +547,12 @@ public final class WitInterfaceParser {
    */
   private Map<String, WitFunction> parseFunctions(
       final String interfaceBody, final Map<String, WitType> types) throws BindgenException {
-    final Map<String, WitFunction> functions = new HashMap<>();
+    // LinkedHashMap so downstream generation follows WIT declaration order.
+    // HashMap iteration is randomized per-JVM (and depends on key hashCodes
+    // for its bin placement); using it here reintroduces cross-JVM
+    // non-determinism into generated sources, which breaks the byte-identical
+    // guarantee CLI users depend on for artifact reproducibility.
+    final Map<String, WitFunction> functions = new java.util.LinkedHashMap<>();
     final Matcher functionMatcher = FUNCTION_PATTERN.matcher(interfaceBody);
 
     while (functionMatcher.find()) {
@@ -771,8 +784,13 @@ public final class WitInterfaceParser {
       this.name = name;
       this.version = version;
       this.packageName = packageName;
-      this.functions = Map.copyOf(functions);
-      this.types = Map.copyOf(types);
+      // LinkedHashMap-backed unmodifiable maps to preserve WIT declaration
+      // order across JVMs. Map.copyOf builds an immutable map with
+      // randomized iteration, which resurfaces as non-deterministic
+      // generated-source ordering.
+      this.functions =
+          java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(functions));
+      this.types = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(types));
       this.imports = List.copyOf(imports);
       this.exports = List.copyOf(exports);
       this.witText = witText;

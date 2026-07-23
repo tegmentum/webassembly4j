@@ -15,6 +15,8 @@
  */
 package ai.tegmentum.webassembly4j.bindgen.wit;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -342,7 +344,10 @@ public abstract class WitTypeKind {
     private final Map<String, WitType> fields;
 
     private RecordTypeKind(final Map<String, WitType> fields) {
-      this.fields = Map.copyOf(Objects.requireNonNull(fields, "fields"));
+      // LinkedHashMap-backed unmodifiable map preserves WIT declaration
+      // order across JVMs; Map.copyOf randomizes iteration order.
+      this.fields =
+          Collections.unmodifiableMap(new LinkedHashMap<>(Objects.requireNonNull(fields, "fields")));
     }
 
     @Override
@@ -395,7 +400,10 @@ public abstract class WitTypeKind {
     private final Map<String, Optional<WitType>> cases;
 
     private VariantTypeKind(final Map<String, Optional<WitType>> cases) {
-      this.cases = Map.copyOf(Objects.requireNonNull(cases, "cases"));
+      // LinkedHashMap-backed unmodifiable map preserves WIT case
+      // declaration order across JVMs; Map.copyOf randomizes iteration.
+      this.cases =
+          Collections.unmodifiableMap(new LinkedHashMap<>(Objects.requireNonNull(cases, "cases")));
     }
 
     @Override

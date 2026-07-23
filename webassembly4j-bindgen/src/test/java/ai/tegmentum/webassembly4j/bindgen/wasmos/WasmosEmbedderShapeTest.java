@@ -107,18 +107,28 @@ class WasmosEmbedderShapeTest {
 
     final CodeGenerator generator = new CodeGenerator(config);
     final List<GeneratedSource> sources = generator.generate();
-    assertTrue(sources.size() >= 7, "expected at least 7 generated sources, got " + sources.size());
+    // ADR-006 hoisted the embedder-api wrapper into the world root, so the
+    // empty `EmbedderApi` carrier is gone. The world now projects six
+    // top-level types/resources + the `embedder-callbacks` interface.
+    assertTrue(sources.size() >= 6, "expected at least 6 generated sources, got " + sources.size());
 
     final Map<String, String> byClass = toSourceMap(sources);
 
-    // Sanity: every top-level type / interface / resource is present.
+    // Sanity: every top-level type / resource / interface is present.
     assertTrue(byClass.containsKey("ErrorCode"), "ErrorCode enum missing");
     assertTrue(byClass.containsKey("Error"), "Error record missing");
     assertTrue(byClass.containsKey("ImportSatisfaction"), "ImportSatisfaction record missing");
     assertTrue(byClass.containsKey("HostProvider"), "HostProvider resource missing");
     assertTrue(byClass.containsKey("RuntimeInstance"), "RuntimeInstance resource missing");
-    assertTrue(byClass.containsKey("EmbedderApi"), "EmbedderApi interface missing");
     assertTrue(byClass.containsKey("EmbedderCallbacks"), "EmbedderCallbacks interface missing");
+    // The hoisted world must NOT re-emit an empty `EmbedderApi` (or `Embedder`)
+    // carrier — that's the whole point of the hoist.
+    assertTrue(
+        !byClass.containsKey("EmbedderApi"),
+        "EmbedderApi carrier must not be generated after the world-level hoist");
+    assertTrue(
+        !byClass.containsKey("Embedder"),
+        "empty world carrier `Embedder` must not be generated");
 
     // ErrorCode: all 7 WIT variants.
     final String errorCode = byClass.get("ErrorCode");
