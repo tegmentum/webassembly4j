@@ -81,13 +81,34 @@ final class EndiveComponentIntegrationTest {
      * Attempt to instantiate a real WASI Preview 2 component that imports
      * {@code wasip2:host/primitives@0.1.0} and {@code wasi:io/poll@0.2.3}.
      *
-     * <p>Full round-trip host-callback dispatch is gated behind Wall 2 on the
-     * wasm-cm Rust side (see {@code HostCallbackDispatcher} javadoc). Until
-     * Wall 2 lands, the guest surfaces {@code HOST_ERR_UNLINKABLE} even when
-     * host providers are registered — this adapter re-throws as
-     * {@link InstantiationException}. The test locks in the honest failure so
-     * the day Wall 2 arrives the assertion here flips and this becomes a real
-     * success path.
+     * <p>Walls 2 &amp; 3 land the guest-side {@code
+     * ImportedInstance::HostCallback} plumbing and the Java-side
+     * {@link run.tegmentum.wasmcm.endive.HostCallbackDispatcher} wiring —
+     * the register/dispatch surface is fully present. The remaining gap is
+     * inside {@code wasmcm-runtime-guest}: its {@code
+     * HostEngineWasm} impl of {@code wasmcm_host_api::HostEngine} does not
+     * override {@code create_host_func}, so the trait default at
+     * {@code crates/wasmcm-host-api/src/engine.rs:271-278} returns
+     * {@code Error::UnsupportedFeature("adapter does not implement
+     * create_host_func")}. The Rust runtime hits this from
+     * {@code Runtime::mint_host_callback_handle} at
+     * {@code crates/wasmcm-runtime/src/lib.rs:2114} while synthesising the
+     * canon-lower &rArr; HostCallback core-func bridge — before the extern
+     * {@code wasmcm_host_call} return path is exercised at all. Surfaces
+     * through the JVM lane as {@code HOST_ERR_UNSUPPORTED} (tag 7).
+     *
+     * <p>The sibling Rust probe {@code
+     * crates/wasmcm-runtime/tests/probe_wasi_p2_clocks.rs} passes cleanly
+     * because it drives {@code WasmtimeCoreEngine} (which overrides
+     * {@code create_host_func}); the JVM sandwich cannot route through
+     * that until the guest-side {@code HostEngineWasm} learns the same
+     * trick over a new extern.</p>
+     *
+     * <p>When that gap closes (guest-side {@code create_host_func} plus
+     * matching {@code instantiate}-with-func-imports on both the guest
+     * Rust and Java sides), flip this to
+     * {@code assertNotNull(component.instantiate(ctx))} and assert the
+     * expected exports.</p>
      */
     @Test
     void wasiClocksComponentReachesInstantiationSite() throws Exception {
@@ -121,17 +142,31 @@ final class EndiveComponentIntegrationTest {
                                         new WasmcmValueCodec.Boxed(
                                                 WasmcmValueCodec.TAG_U64, 1L)
                                     }))
+                    // wasi:io/poll@0.2.3 is a resource-type-only import in
+                    // this component (num_funcs=0 in the sibling Rust
+                    // probe); we register a placeholder entry so the guest
+                    // provider table has a row for it. The registered
+                    // dispatcher is never reached — the canon-lower ⇒
+                    // HostCallback chain bails earlier at create_host_func.
+                    .addWitHostFunction(
+                            new WitHostFunctionDefinition(
+                                    "wasi:io/poll@0.2.3#__placeholder",
+                                    args -> new Object[0]))
                     .build();
 
-            // Instantiation is expected to fail today with an UNLINKABLE from the
-            // guest — wasi:io/poll@0.2.3 imports a resource type the runtime
-            // cannot yet satisfy, and Wall 2 (canon-lower routing to a host
-            // callback) is not yet wired. When Wall 2 lands, flip this to
-            // assertNotNull(component.instantiate(ctx)).
+            // Instantiation is expected to fail with HOST_ERR_UNSUPPORTED
+            // "adapter does not implement create_host_func" — see the
+            // class javadoc above for file:line of the true wall. When
+            // the guest-side HostEngineWasm learns create_host_func, flip
+            // this to assertNotNull(component.instantiate(ctx)) and
+            // assert the exported clocks interface is present.
             InstantiationException ex = assertThrows(
                     InstantiationException.class,
                     () -> component.instantiate(ctx));
             assertNotNull(ex.getMessage(), "guest should have written a diagnostic");
+            assertTrue(
+                    ex.getMessage().contains("adapter does not implement create_host_func"),
+                    "expected the honest create_host_func wall but got: " + ex.getMessage());
         }
     }
 
