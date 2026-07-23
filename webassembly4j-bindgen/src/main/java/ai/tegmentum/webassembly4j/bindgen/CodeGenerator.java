@@ -28,12 +28,14 @@ import ai.tegmentum.webassembly4j.bindgen.model.BindgenParameter;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenType;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenVariantCase;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceParser;
-
 import ai.tegmentum.webassembly4j.bindgen.wit.WitFunction;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceDefinition;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitParameter;
+import ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser;
+import ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser.WitResourceMethod;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitType;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitTypeCategory;
+import ai.tegmentum.webassembly4j.bindgen.wit.WitWorldPreprocessor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -168,44 +170,234 @@ public final class CodeGenerator {
       final String packageName =
           config.getPackageName() != null ? config.getPackageName() : "generated";
 
-      final WitInterfaceParser parser = new WitInterfaceParser();
-      final WitInterfaceDefinition definition = parser.parseInterface(witText, packageName);
+      // Fan a full WIT world source (package + world + multiple
+      // interfaces + resource bodies) out into per-interface entries
+      // the existing single-interface WIT parser can consume.
+      final List<WitWorldPreprocessor.Interface> preprocessed =
+          WitWorldPreprocessor.preprocess(witText);
+
+      // Fall back to legacy single-interface parsing if the input
+      // wasn't a multi-interface world (e.g. tests that pass a bare
+      // `interface X { ... }`).
+      final List<WitWorldPreprocessor.Interface> interfacesToParse;
+      if (preprocessed.isEmpty()) {
+        return parseWitSourceLegacy(witPath, witText, packageName);
+      }
+      interfacesToParse = preprocessed;
 
       final BindgenModel.Builder modelBuilder =
-          BindgenModel.builder().name(definition.getName()).sourceFile(witPath.toString());
+          BindgenModel.builder().name(witPath.getFileName().toString()).sourceFile(witPath.toString());
 
-      // Convert WIT types to bindgen types
-      final Map<String, BindgenType> convertedTypes = new HashMap<>();
-      for (Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
-        final BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
-        convertedTypes.put(entry.getKey(), bindgenType);
+      for (final WitWorldPreprocessor.Interface pre : interfacesToParse) {
+        final String reconstructed = "interface " + pre.getName() + " {\n" + pre.getBody() + "\n}\n";
+        final WitInterfaceParser parser = new WitInterfaceParser();
+        final WitInterfaceDefinition definition = parser.parseInterface(reconstructed, packageName);
+
+        final Map<String, BindgenType> convertedTypes = new HashMap<>();
+        for (final Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
+          BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
+          if (bindgenType.getKind() == BindgenType.Kind.RESOURCE
+              && pre.getResourceBodies().containsKey(entry.getKey())) {
+            final BindgenType.Builder rebuilt =
+                BindgenType.builder()
+                    .name(bindgenType.getName())
+                    .kind(BindgenType.Kind.RESOURCE)
+                    .documentation(bindgenType.getDocumentation().orElse(null));
+            final List<WitResourceMethod> methods =
+                WitResourceBodyParser.parse(
+                    entry.getKey(), pre.getResourceBodies().get(entry.getKey()));
+            for (final WitResourceMethod m : methods) {
+              rebuilt.addResourceMethod(convertResourceMethod(m, convertedTypes));
+            }
+            bindgenType = rebuilt.build();
+          }
+          convertedTypes.put(entry.getKey(), bindgenType);
+        }
+
+        final List<BindgenFunction> convertedFunctions = new ArrayList<>();
+        for (final Map.Entry<String, WitFunction> entry : definition.getFunctions().entrySet()) {
+          final BindgenFunction bindgenFunc =
+              convertWitFunction(entry.getValue(), convertedTypes);
+          convertedFunctions.add(bindgenFunc);
+        }
+
+        final BindgenInterface.Builder ifaceBuilder =
+            BindgenInterface.builder().name(definition.getName()).packageName(packageName);
+        for (final BindgenFunction func : convertedFunctions) {
+          ifaceBuilder.addFunction(func);
+        }
+        for (final BindgenType type : convertedTypes.values()) {
+          ifaceBuilder.addType(type);
+        }
+        modelBuilder.addInterface(ifaceBuilder.build());
       }
-
-      // Convert WIT functions to bindgen functions
-      final List<BindgenFunction> convertedFunctions = new ArrayList<>();
-      for (Map.Entry<String, WitFunction> entry : definition.getFunctions().entrySet()) {
-        final BindgenFunction bindgenFunc = convertWitFunction(entry.getValue(), convertedTypes);
-        convertedFunctions.add(bindgenFunc);
-      }
-
-      // Build interface containing types and functions
-      final BindgenInterface.Builder ifaceBuilder =
-          BindgenInterface.builder().name(definition.getName()).packageName(packageName);
-
-      for (BindgenFunction func : convertedFunctions) {
-        ifaceBuilder.addFunction(func);
-      }
-      for (BindgenType type : convertedTypes.values()) {
-        ifaceBuilder.addType(type);
-      }
-
-      modelBuilder.addInterface(ifaceBuilder.build());
 
       return modelBuilder.build();
     } catch (final IOException e) {
       throw new BindgenException("Failed to read WIT file: " + witPath, e);
     } catch (final BindgenException e) {
       throw new BindgenException("Failed to parse WIT file: " + witPath, e);
+    }
+  }
+
+  private BindgenModel parseWitSourceLegacy(
+      final Path witPath, final String witText, final String packageName)
+      throws BindgenException {
+    final WitInterfaceParser parser = new WitInterfaceParser();
+    final WitInterfaceDefinition definition = parser.parseInterface(witText, packageName);
+
+    final BindgenModel.Builder modelBuilder =
+        BindgenModel.builder().name(definition.getName()).sourceFile(witPath.toString());
+
+    final Map<String, BindgenType> convertedTypes = new HashMap<>();
+    for (final Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
+      final BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
+      convertedTypes.put(entry.getKey(), bindgenType);
+    }
+
+    final List<BindgenFunction> convertedFunctions = new ArrayList<>();
+    for (final Map.Entry<String, WitFunction> entry : definition.getFunctions().entrySet()) {
+      final BindgenFunction bindgenFunc = convertWitFunction(entry.getValue(), convertedTypes);
+      convertedFunctions.add(bindgenFunc);
+    }
+
+    final BindgenInterface.Builder ifaceBuilder =
+        BindgenInterface.builder().name(definition.getName()).packageName(packageName);
+    for (final BindgenFunction func : convertedFunctions) {
+      ifaceBuilder.addFunction(func);
+    }
+    for (final BindgenType type : convertedTypes.values()) {
+      ifaceBuilder.addType(type);
+    }
+    modelBuilder.addInterface(ifaceBuilder.build());
+    return modelBuilder.build();
+  }
+
+  /**
+   * Convert a parsed WIT resource method into a {@link BindgenFunction}. Type
+   * expressions in parameters and the return position are resolved against the
+   * interface's already-materialized type table. Anything unresolved falls back
+   * to an opaque reference — bindgen doesn't run a full second-pass symbol
+   * table today, so cross-resource references need the caller to have declared
+   * the sibling resource first.
+   */
+  private BindgenFunction convertResourceMethod(
+      final WitResourceMethod method, final Map<String, BindgenType> knownTypes) {
+    final BindgenFunction.Builder builder =
+        BindgenFunction.builder()
+            .name(method.getName())
+            .constructor(method.getKind() == WitResourceMethod.Kind.CONSTRUCTOR)
+            .staticMethod(method.getKind() == WitResourceMethod.Kind.STATIC);
+    for (final WitParameter p : method.getParameters()) {
+      builder.addParameter(
+          new BindgenParameter(p.getName(), resolveTypeExpression(p.getType().getName(), knownTypes)));
+    }
+    if (method.getReturnTypeExpression().isPresent()) {
+      builder.returnType(
+          resolveTypeExpression(method.getReturnTypeExpression().get(), knownTypes));
+    }
+    return builder.build();
+  }
+
+  /**
+   * Resolve a raw WIT type expression string (e.g. {@code list<u8>},
+   * {@code borrow<host-provider>}, {@code result<runtime-instance, error>})
+   * into a bindgen type. Names that match already-known types resolve as
+   * references; primitives resolve as primitives; container expressions
+   * (list/option/result) recurse. Anything else lands as an opaque reference.
+   */
+  private BindgenType resolveTypeExpression(
+      final String expression, final Map<String, BindgenType> knownTypes) {
+    String expr = expression.trim();
+    // Unwrap borrow<T> and own<T> — resource-lifetime qualifiers are ABI
+    // concerns; the generated Java surface only cares about the referenced
+    // type.
+    while (true) {
+      if (expr.startsWith("borrow<") && expr.endsWith(">")) {
+        expr = expr.substring("borrow<".length(), expr.length() - 1).trim();
+      } else if (expr.startsWith("own<") && expr.endsWith(">")) {
+        expr = expr.substring("own<".length(), expr.length() - 1).trim();
+      } else {
+        break;
+      }
+    }
+    if (knownTypes.containsKey(expr)) {
+      return BindgenType.reference(expr);
+    }
+    // Primitive?
+    if (isKnownPrimitive(expr)) {
+      return BindgenType.primitive(expr);
+    }
+    // list<T>
+    if (expr.startsWith("list<") && expr.endsWith(">")) {
+      final String inner = expr.substring(5, expr.length() - 1).trim();
+      return BindgenType.list(resolveTypeExpression(inner, knownTypes));
+    }
+    // option<T>
+    if (expr.startsWith("option<") && expr.endsWith(">")) {
+      final String inner = expr.substring(7, expr.length() - 1).trim();
+      return BindgenType.option(resolveTypeExpression(inner, knownTypes));
+    }
+    // result<T, E>, result<_, E>, result<T, _>, result<_>, result
+    if (expr.equals("result")) {
+      return BindgenType.result(null, null);
+    }
+    if (expr.startsWith("result<") && expr.endsWith(">")) {
+      final String inner = expr.substring(7, expr.length() - 1).trim();
+      if (inner.isEmpty()) {
+        return BindgenType.result(null, null);
+      }
+      final int comma = topLevelComma(inner);
+      final String okPart = comma < 0 ? inner : inner.substring(0, comma).trim();
+      final String errPart = comma < 0 ? "" : inner.substring(comma + 1).trim();
+      final BindgenType ok =
+          okPart.isEmpty() || okPart.equals("_")
+              ? null
+              : resolveTypeExpression(okPart, knownTypes);
+      final BindgenType err =
+          errPart.isEmpty() || errPart.equals("_")
+              ? null
+              : resolveTypeExpression(errPart, knownTypes);
+      return BindgenType.result(ok, err);
+    }
+    return BindgenType.reference(expr);
+  }
+
+  private static int topLevelComma(final String s) {
+    int angle = 0;
+    for (int i = 0; i < s.length(); i++) {
+      final char c = s.charAt(i);
+      if (c == '<') {
+        angle++;
+      } else if (c == '>') {
+        angle = Math.max(0, angle - 1);
+      } else if (c == ',' && angle == 0) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static boolean isKnownPrimitive(final String name) {
+    switch (name) {
+      case "bool":
+      case "s8":
+      case "s16":
+      case "s32":
+      case "s64":
+      case "u8":
+      case "u16":
+      case "u32":
+      case "u64":
+      case "f32":
+      case "f64":
+      case "float32":
+      case "float64":
+      case "char":
+      case "string":
+        return true;
+      default:
+        return false;
     }
   }
 

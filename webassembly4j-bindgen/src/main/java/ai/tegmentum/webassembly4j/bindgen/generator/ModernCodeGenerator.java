@@ -18,6 +18,8 @@ package ai.tegmentum.webassembly4j.bindgen.generator;
 
 import ai.tegmentum.webassembly4j.bindgen.BindgenConfig;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenField;
+import ai.tegmentum.webassembly4j.bindgen.model.BindgenFunction;
+import ai.tegmentum.webassembly4j.bindgen.model.BindgenParameter;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenType;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenVariantCase;
 import ai.tegmentum.webassembly4j.bindgen.util.JavaNaming;
@@ -205,10 +207,16 @@ public final class ModernCodeGenerator extends JavaCodeGenerator {
     // Add handle field
     classBuilder.addField(TypeName.LONG, "handle", Modifier.PRIVATE, Modifier.FINAL);
 
-    // Add constructor
+    // Emit the handle-holding constructor unless the WIT resource declared
+    // its own `constructor(...)`. When a WIT constructor is present it
+    // becomes the primary way callers get a handle; the handle-only ctor
+    // is still emitted as `protected` so subclasses / generated dispatch
+    // sites can wrap an existing handle.
+    final boolean hasWitConstructor =
+        type.getResourceMethods().stream().anyMatch(BindgenFunction::isConstructor);
     classBuilder.addMethod(
         MethodSpec.constructorBuilder()
-            .addModifiers(Modifier.PUBLIC)
+            .addModifiers(hasWitConstructor ? Modifier.PROTECTED : Modifier.PUBLIC)
             .addParameter(TypeName.LONG, "handle")
             .addStatement("this.handle = handle")
             .build());
@@ -229,6 +237,55 @@ public final class ModernCodeGenerator extends JavaCodeGenerator {
             .addComment("Resource cleanup - to be implemented by runtime")
             .build());
 
+    // Emit the resource's WIT-declared methods. Bodies throw
+    // UnsupportedOperationException — the SPI runtime wiring that would
+    // route these to the guest hasn't landed yet (ADR-005 tracks it), so
+    // the surface is correct even though dispatch is stubbed.
+    for (final BindgenFunction method : type.getResourceMethods()) {
+      classBuilder.addMethod(generateResourceMethod(className, method));
+    }
+
     return classBuilder.build();
+  }
+
+  private MethodSpec generateResourceMethod(final String className, final BindgenFunction method) {
+    if (method.isConstructor()) {
+      // Emit as a static factory `create` — matches the WIT constructor
+      // shape (constructs a new resource from primitive args) but doesn't
+      // collide with Java's ctor rules (return type, no name).
+      MethodSpec.Builder factory =
+          MethodSpec.methodBuilder("create")
+              .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+              .returns(ClassName.get(config.getPackageName(), className));
+      for (BindgenParameter p : method.getParameters()) {
+        factory.addParameter(mapType(p.getType()), JavaNaming.toParameterName(p.getName()));
+      }
+      factory.addStatement(
+          "throw new $T($S)",
+          UnsupportedOperationException.class,
+          "wasmos:host/embedder constructor dispatch not yet wired");
+      return factory.build();
+    }
+    final String name = JavaNaming.toMethodName(method.getName());
+    MethodSpec.Builder mb = MethodSpec.methodBuilder(name).addModifiers(Modifier.PUBLIC);
+    if (method.isStatic()) {
+      mb.addModifiers(Modifier.STATIC);
+    }
+    for (BindgenParameter p : method.getParameters()) {
+      mb.addParameter(mapType(p.getType()), JavaNaming.toParameterName(p.getName()));
+    }
+    if (method.hasReturnType()) {
+      mb.returns(mapType(method.getReturnType().get()));
+      mb.addStatement(
+          "throw new $T($S)",
+          UnsupportedOperationException.class,
+          "wasmos:host/embedder method dispatch not yet wired");
+    } else {
+      mb.addStatement(
+          "throw new $T($S)",
+          UnsupportedOperationException.class,
+          "wasmos:host/embedder method dispatch not yet wired");
+    }
+    return mb.build();
   }
 }

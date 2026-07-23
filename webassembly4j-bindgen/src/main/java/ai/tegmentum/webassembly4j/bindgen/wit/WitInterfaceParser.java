@@ -153,16 +153,13 @@ public final class WitInterfaceParser {
     // `flags name { ... }`). This is the canonical WIT syntax —
     // running it first lets the second pass resolve aliases that
     // reference them.
-    collectStandalone(
-        RECORD_DECLARATION_PATTERN,
-        interfaceBody,
-        types,
-        (name, body) -> parseRecordType(name, body));
-    collectStandalone(
-        VARIANT_DECLARATION_PATTERN,
-        interfaceBody,
-        types,
-        (name, body) -> parseVariantType(name, body));
+    //
+    // Enums and flags come first so that records/variants whose
+    // fields or case payloads reference them can resolve without
+    // requiring authors to declare their WIT types in dependency
+    // order. Records still can't forward-reference other records
+    // in this simple regex parser — that would need a proper
+    // two-phase symbol-table build.
     collectStandalone(
         ENUM_DECLARATION_PATTERN,
         interfaceBody,
@@ -173,6 +170,16 @@ public final class WitInterfaceParser {
         interfaceBody,
         types,
         (name, body) -> parseFlagsType(name, body));
+    collectStandalone(
+        RECORD_DECLARATION_PATTERN,
+        interfaceBody,
+        types,
+        (name, body) -> parseRecordType(name, body));
+    collectStandalone(
+        VARIANT_DECLARATION_PATTERN,
+        interfaceBody,
+        types,
+        (name, body) -> parseVariantType(name, body));
 
     // Pass 2: `type X = ...;` alias declarations.
     final Matcher typeMatcher = TYPE_PATTERN.matcher(interfaceBody);
@@ -643,15 +650,17 @@ public final class WitInterfaceParser {
    * @throws BindgenException if type cannot be resolved
    */
   private WitType resolveType(final String typeName) throws BindgenException {
+    final String stripped = stripResourceQualifier(typeName);
+
     // Check cache first
-    final WitType cachedType = typeCache.get(typeName);
+    final WitType cachedType = typeCache.get(stripped);
     if (cachedType != null) {
       return cachedType;
     }
 
     // Try to parse as primitive type
     try {
-      final WitPrimitiveType primitive = WitPrimitiveType.fromString(typeName);
+      final WitPrimitiveType primitive = WitPrimitiveType.fromString(stripped);
       return WitType.primitive(primitive);
     } catch (final IllegalArgumentException e) {
       // Not a primitive type
@@ -659,12 +668,35 @@ public final class WitInterfaceParser {
 
     // Try to parse as inline type definition (list<T>, option<T>, etc.)
     try {
-      return parseTypeDefinition(typeName, typeName);
+      return parseTypeDefinition(stripped, stripped);
     } catch (final BindgenException e) {
       // Not a parseable type definition
     }
 
-    throw new BindgenException("Unknown type: " + typeName);
+    // Fall back to a synthetic resource reference. WIT identifiers
+    // that don't resolve in the local scope typically come from a
+    // sibling resource declaration whose body the caller stripped
+    // out before feeding this interface body in — treat them as
+    // opaque handles rather than failing the whole parse.
+    return WitType.resource(stripped, stripped);
+  }
+
+  /**
+   * Peel resource-qualifier wrappers ({@code borrow<X>}, {@code own<X>}) off
+   * a type expression. Both wrappers are ABI-level lifetime hints; at the
+   * generated-Java surface the referenced type is what matters.
+   */
+  private static String stripResourceQualifier(final String typeName) {
+    String current = typeName.trim();
+    while (true) {
+      if (current.startsWith("borrow<") && current.endsWith(">")) {
+        current = current.substring("borrow<".length(), current.length() - 1).trim();
+      } else if (current.startsWith("own<") && current.endsWith(">")) {
+        current = current.substring("own<".length(), current.length() - 1).trim();
+      } else {
+        return current;
+      }
+    }
   }
 
   /** Initializes primitive types in the type cache. */
