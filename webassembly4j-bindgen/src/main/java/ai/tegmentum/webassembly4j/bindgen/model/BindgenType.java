@@ -69,6 +69,7 @@ public final class BindgenType {
   private final BindgenType errorType;
   private final List<BindgenType> tupleElements;
   private final String referencedTypeName;
+  private final List<BindgenFunction> resourceMethods;
 
   private BindgenType(final Builder builder) {
     this.name = builder.name;
@@ -82,6 +83,8 @@ public final class BindgenType {
     this.errorType = builder.errorType;
     this.tupleElements = Collections.unmodifiableList(new ArrayList<>(builder.tupleElements));
     this.referencedTypeName = builder.referencedTypeName;
+    this.resourceMethods =
+        Collections.unmodifiableList(new ArrayList<>(builder.resourceMethods));
   }
 
   /**
@@ -258,6 +261,20 @@ public final class BindgenType {
   }
 
   /**
+   * Returns the methods attached to this resource type.
+   *
+   * <p>Populated only for {@link Kind#RESOURCE} types parsed from WIT resource
+   * declarations that carry a constructor / static / instance method body. The
+   * list is empty for every other kind and for resources declared without a
+   * body.
+   *
+   * @return the ordered list of resource methods (may be empty)
+   */
+  public List<BindgenFunction> getResourceMethods() {
+    return resourceMethods;
+  }
+
+  /**
    * Checks if this is a primitive type.
    *
    * @return true if primitive
@@ -328,6 +345,7 @@ public final class BindgenType {
     private BindgenType errorType;
     private List<BindgenType> tupleElements = new ArrayList<>();
     private String referencedTypeName;
+    private List<BindgenFunction> resourceMethods = new ArrayList<>();
 
     private Builder() {}
 
@@ -398,6 +416,16 @@ public final class BindgenType {
 
     public Builder referencedTypeName(final String typeName) {
       this.referencedTypeName = typeName;
+      return this;
+    }
+
+    public Builder resourceMethods(final List<BindgenFunction> methods) {
+      this.resourceMethods = new ArrayList<>(methods);
+      return this;
+    }
+
+    public Builder addResourceMethod(final BindgenFunction method) {
+      this.resourceMethods.add(method);
       return this;
     }
 

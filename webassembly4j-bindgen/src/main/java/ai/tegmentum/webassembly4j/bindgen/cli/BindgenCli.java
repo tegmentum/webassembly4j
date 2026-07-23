@@ -102,6 +102,14 @@ public final class BindgenCli implements Callable<Integer> {
   private boolean noBuilders;
 
   @Option(
+      names = {"--no-impl"},
+      description =
+          "Disable *Impl and *BindingProvider generation. Use when the WIT world describes an"
+              + " abstract embedder surface (bindgen consumers write their own dispatch instead"
+              + " of using the marshalling-based Impl scaffolding).")
+  private boolean noImpl;
+
+  @Option(
       names = {"--verbose", "-v"},
       description = "Enable verbose output")
   private boolean verbose;
@@ -141,6 +149,8 @@ public final class BindgenCli implements Callable<Integer> {
               .wasmSources(validWasmSources)
               .generateJavadoc(!noJavadoc)
               .generateBuilders(!noBuilders)
+              .generateImplementations(!noImpl)
+              .generateServiceLoader(!noImpl)
               .build();
 
       if (verbose) {
