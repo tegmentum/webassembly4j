@@ -81,32 +81,31 @@ final class EndiveComponentIntegrationTest {
      * Attempt to instantiate a real WASI Preview 2 component that imports
      * {@code wasip2:host/primitives@0.1.0} and {@code wasi:io/poll@0.2.3}.
      *
-     * <p>Walls 2 &amp; 3 land the guest-side {@code
-     * ImportedInstance::HostCallback} plumbing and the Java-side
-     * {@link run.tegmentum.wasmcm.endive.HostCallbackDispatcher} wiring —
-     * the register/dispatch surface is fully present. The remaining gap is
-     * inside {@code wasmcm-runtime-guest}: its {@code
-     * HostEngineWasm} impl of {@code wasmcm_host_api::HostEngine} does not
-     * override {@code create_host_func}, so the trait default at
-     * {@code crates/wasmcm-host-api/src/engine.rs:271-278} returns
-     * {@code Error::UnsupportedFeature("adapter does not implement
-     * create_host_func")}. The Rust runtime hits this from
-     * {@code Runtime::mint_host_callback_handle} at
-     * {@code crates/wasmcm-runtime/src/lib.rs:2114} while synthesising the
-     * canon-lower &rArr; HostCallback core-func bridge — before the extern
-     * {@code wasmcm_host_call} return path is exercised at all. Surfaces
-     * through the JVM lane as {@code HOST_ERR_UNSUPPORTED} (tag 7).
+     * <p>Walls 2, 3 and 8 have landed: the register/dispatch surface, the
+     * runtime-side {@code ImportedInstance::HostCallback} plumbing, and
+     * the guest-side {@code HostEngineWasm::create_host_func} +
+     * {@code instantiate}-with-CoreFunc-imports pair are all wired
+     * (see the sibling wasm-cm change that adds
+     * {@code env.host_create_host_func},
+     * {@code env.host_instantiate_with_imports}, and the
+     * {@code wasmcm_dispatch_host_func} export).</p>
      *
-     * <p>The sibling Rust probe {@code
-     * crates/wasmcm-runtime/tests/probe_wasi_p2_clocks.rs} passes cleanly
-     * because it drives {@code WasmtimeCoreEngine} (which overrides
-     * {@code create_host_func}); the JVM sandwich cannot route through
-     * that until the guest-side {@code HostEngineWasm} learns the same
-     * trick over a new extern.</p>
+     * <p>The current wall is <b>Wall 9</b>:
+     * {@code HostEngineWasm::module_imports} at
+     * {@code crates/wasmcm-runtime-guest/src/host_engine.rs:262-269}
+     * still returns an empty vector — the variable-length import
+     * descriptor codec + the paired {@code host_module_import_at}
+     * handler are not yet wired. The runtime's
+     * {@code instantiate_with_ref_imports} at
+     * {@code crates/wasmcm-runtime/src/lib.rs:828} therefore builds an
+     * empty {@code ext_imports} for a module that actually declares
+     * imports, and Endive's own linker surfaces that mismatch as
+     * {@code HOST_ERR_UNLINKABLE: "missing import: <mod>.<name>"}.</p>
      *
-     * <p>When that gap closes (guest-side {@code create_host_func} plus
-     * matching {@code instantiate}-with-func-imports on both the guest
-     * Rust and Java sides), flip this to
+     * <p>Surfaces through the WASI P2 lane as a
+     * {@link InstantiationException} whose message names the missing
+     * import. When Wall 9 closes (module_imports/exports introspection
+     * fully wired), flip to
      * {@code assertNotNull(component.instantiate(ctx))} and assert the
      * expected exports.</p>
      */
@@ -145,28 +144,34 @@ final class EndiveComponentIntegrationTest {
                     // wasi:io/poll@0.2.3 is a resource-type-only import in
                     // this component (num_funcs=0 in the sibling Rust
                     // probe); we register a placeholder entry so the guest
-                    // provider table has a row for it. The registered
-                    // dispatcher is never reached — the canon-lower ⇒
-                    // HostCallback chain bails earlier at create_host_func.
+                    // provider table has a row for it. Wall 9 (missing
+                    // module_imports introspection) is the current
+                    // blocker — the callback is not yet reached.
                     .addWitHostFunction(
                             new WitHostFunctionDefinition(
                                     "wasi:io/poll@0.2.3#__placeholder",
                                     args -> new Object[0]))
                     .build();
 
-            // Instantiation is expected to fail with HOST_ERR_UNSUPPORTED
-            // "adapter does not implement create_host_func" — see the
-            // class javadoc above for file:line of the true wall. When
-            // the guest-side HostEngineWasm learns create_host_func, flip
-            // this to assertNotNull(component.instantiate(ctx)) and
-            // assert the exported clocks interface is present.
+            // Wall 9: expect HOST_ERR_UNLINKABLE from the linker step,
+            // carrying a "missing import: <interface>.<name>" message.
+            // The message text is the strong signal Wall 8 actually
+            // works — the runtime got past create_host_func and reached
+            // Endive's own linker with a module whose imports the
+            // empty module_imports stub can't enumerate.
             InstantiationException ex = assertThrows(
                     InstantiationException.class,
                     () -> component.instantiate(ctx));
             assertNotNull(ex.getMessage(), "guest should have written a diagnostic");
             assertTrue(
-                    ex.getMessage().contains("adapter does not implement create_host_func"),
-                    "expected the honest create_host_func wall but got: " + ex.getMessage());
+                    ex.getMessage().contains("missing import"),
+                    "expected the honest module_imports (Wall 9) wall — 'missing import' "
+                            + "— but got: " + ex.getMessage());
+            assertTrue(
+                    ex.getMessage().contains("wasip2:host/primitives")
+                            || ex.getMessage().contains("wasi:io/poll"),
+                    "expected the missing-import to name a wasi_p2 interface "
+                            + "(confirming Wall 8 was cleared); was: " + ex.getMessage());
         }
     }
 
