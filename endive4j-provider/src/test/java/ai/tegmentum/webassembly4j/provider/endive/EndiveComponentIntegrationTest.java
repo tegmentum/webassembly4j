@@ -2,7 +2,6 @@ package ai.tegmentum.webassembly4j.provider.endive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -11,7 +10,6 @@ import ai.tegmentum.webassembly4j.api.ComponentInstance;
 import ai.tegmentum.webassembly4j.api.DefaultLinkingContext;
 import ai.tegmentum.webassembly4j.api.Engine;
 import ai.tegmentum.webassembly4j.api.WitHostFunctionDefinition;
-import ai.tegmentum.webassembly4j.api.exception.InstantiationException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -78,39 +76,29 @@ final class EndiveComponentIntegrationTest {
     }
 
     /**
-     * Attempt to instantiate a real WASI Preview 2 component that imports
+     * Instantiate a real WASI Preview 2 component that imports
      * {@code wasip2:host/primitives@0.1.0} and {@code wasi:io/poll@0.2.3}.
      *
-     * <p>Walls 2, 3 and 8 have landed: the register/dispatch surface, the
-     * runtime-side {@code ImportedInstance::HostCallback} plumbing, and
-     * the guest-side {@code HostEngineWasm::create_host_func} +
-     * {@code instantiate}-with-CoreFunc-imports pair are all wired
-     * (see the sibling wasm-cm change that adds
-     * {@code env.host_create_host_func},
-     * {@code env.host_instantiate_with_imports}, and the
-     * {@code wasmcm_dispatch_host_func} export).</p>
+     * <p>Walls 2, 3, 8 and 9 have landed: the register/dispatch
+     * surface, the runtime-side {@code ImportedInstance::HostCallback}
+     * plumbing, the guest-side {@code HostEngineWasm::create_host_func}
+     * + {@code instantiate}-with-CoreFunc-imports pair, and — most
+     * recently — the variable-length import descriptor codec that
+     * turns {@code HostEngineWasm::module_imports} into a real
+     * enumeration are all wired end-to-end. The runtime's
+     * {@code instantiate_with_ref_imports} builds a full
+     * {@code ext_imports} list from the compiled module's declared
+     * imports and Endive's linker successfully binds every row.</p>
      *
-     * <p>The current wall is <b>Wall 9</b>:
-     * {@code HostEngineWasm::module_imports} at
-     * {@code crates/wasmcm-runtime-guest/src/host_engine.rs:262-269}
-     * still returns an empty vector — the variable-length import
-     * descriptor codec + the paired {@code host_module_import_at}
-     * handler are not yet wired. The runtime's
-     * {@code instantiate_with_ref_imports} at
-     * {@code crates/wasmcm-runtime/src/lib.rs:828} therefore builds an
-     * empty {@code ext_imports} for a module that actually declares
-     * imports, and Endive's own linker surfaces that mismatch as
-     * {@code HOST_ERR_UNLINKABLE: "missing import: <mod>.<name>"}.</p>
-     *
-     * <p>Surfaces through the WASI P2 lane as a
-     * {@link InstantiationException} whose message names the missing
-     * import. When Wall 9 closes (module_imports/exports introspection
-     * fully wired), flip to
-     * {@code assertNotNull(component.instantiate(ctx))} and assert the
-     * expected exports.</p>
+     * <p>Exit criterion: {@code component.instantiate(ctx)} returns a
+     * non-null instance and the guest surfaces at least one export.
+     * If a Wall 10 emerges (e.g. an ImportedInstance::Component gap or
+     * a Resource wiring issue), this test will fail with a fresh
+     * diagnostic and the assertions get flipped again per the
+     * milestone discipline.</p>
      */
     @Test
-    void wasiClocksComponentReachesInstantiationSite() throws Exception {
+    void wasiClocksComponentInstantiatesCleanly() throws Exception {
         assumeGuestPresent();
         byte[] bytes = loadClasspath("wasi_p2_clocks.component.wasm");
         assumeTrue(bytes != null, "wasi_p2_clocks.component.wasm missing from test resources");
@@ -141,37 +129,22 @@ final class EndiveComponentIntegrationTest {
                                         new WasmcmValueCodec.Boxed(
                                                 WasmcmValueCodec.TAG_U64, 1L)
                                     }))
-                    // wasi:io/poll@0.2.3 is a resource-type-only import in
-                    // this component (num_funcs=0 in the sibling Rust
-                    // probe); we register a placeholder entry so the guest
-                    // provider table has a row for it. Wall 9 (missing
-                    // module_imports introspection) is the current
-                    // blocker — the callback is not yet reached.
+                    // wasi:io/poll@0.2.3 is a resource-type-only import
+                    // (num_funcs=0 in the sibling Rust probe); a
+                    // placeholder entry keeps the guest's provider
+                    // cross-check happy.
                     .addWitHostFunction(
                             new WitHostFunctionDefinition(
                                     "wasi:io/poll@0.2.3#__placeholder",
                                     args -> new Object[0]))
                     .build();
 
-            // Wall 9: expect HOST_ERR_UNLINKABLE from the linker step,
-            // carrying a "missing import: <interface>.<name>" message.
-            // The message text is the strong signal Wall 8 actually
-            // works — the runtime got past create_host_func and reached
-            // Endive's own linker with a module whose imports the
-            // empty module_imports stub can't enumerate.
-            InstantiationException ex = assertThrows(
-                    InstantiationException.class,
-                    () -> component.instantiate(ctx));
-            assertNotNull(ex.getMessage(), "guest should have written a diagnostic");
+            ComponentInstance instance = component.instantiate(ctx);
+            assertNotNull(instance, "instantiate should return a live instance after Wall 9");
             assertTrue(
-                    ex.getMessage().contains("missing import"),
-                    "expected the honest module_imports (Wall 9) wall — 'missing import' "
-                            + "— but got: " + ex.getMessage());
-            assertTrue(
-                    ex.getMessage().contains("wasip2:host/primitives")
-                            || ex.getMessage().contains("wasi:io/poll"),
-                    "expected the missing-import to name a wasi_p2 interface "
-                            + "(confirming Wall 8 was cleared); was: " + ex.getMessage());
+                    !instance.exportedFunctions().isEmpty(),
+                    "wasi_p2_clocks should surface at least one export; got "
+                            + instance.exportedFunctions());
         }
     }
 
