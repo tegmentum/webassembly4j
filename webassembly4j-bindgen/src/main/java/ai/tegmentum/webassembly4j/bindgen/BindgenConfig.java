@@ -50,6 +50,7 @@ public final class BindgenConfig {
   private final boolean generateBuilders;
   private final boolean generateImplementations;
   private final boolean generateServiceLoader;
+  private final String runtimeProviderName;
 
   private BindgenConfig(final Builder builder) {
     this.codeStyle = builder.codeStyle;
@@ -61,6 +62,7 @@ public final class BindgenConfig {
     this.generateBuilders = builder.generateBuilders;
     this.generateImplementations = builder.generateImplementations;
     this.generateServiceLoader = builder.generateServiceLoader;
+    this.runtimeProviderName = builder.runtimeProviderName;
   }
 
   /**
@@ -154,6 +156,21 @@ public final class BindgenConfig {
   }
 
   /**
+   * Returns the name of the runtime-provider SPI to emit, or {@code null} to use the legacy
+   * "throwing-body" resource dispatch (bindgen 1.x behaviour).
+   *
+   * <p>When non-null (bindgen 2.0 SPI-dispatch mode), the generator additionally emits a
+   * {@code <name>} interface and a {@code <name>Registry} class in the target package; resource
+   * method bodies dispatch through that registry. See
+   * {@code docs/design-2.0.md} for the full contract.
+   *
+   * @return the runtime-provider interface name, or {@code null} if not configured
+   */
+  public String getRuntimeProviderName() {
+    return runtimeProviderName;
+  }
+
+  /**
    * Checks if there are WIT sources configured.
    *
    * @return true if WIT sources exist
@@ -206,7 +223,8 @@ public final class BindgenConfig {
         && Objects.equals(packageName, that.packageName)
         && Objects.equals(outputDirectory, that.outputDirectory)
         && Objects.equals(witSources, that.witSources)
-        && Objects.equals(wasmSources, that.wasmSources);
+        && Objects.equals(wasmSources, that.wasmSources)
+        && Objects.equals(runtimeProviderName, that.runtimeProviderName);
   }
 
   @Override
@@ -220,7 +238,8 @@ public final class BindgenConfig {
         generateJavadoc,
         generateBuilders,
         generateImplementations,
-        generateServiceLoader);
+        generateServiceLoader,
+        runtimeProviderName);
   }
 
   @Override
@@ -247,6 +266,8 @@ public final class BindgenConfig {
         + generateImplementations
         + ", generateServiceLoader="
         + generateServiceLoader
+        + ", runtimeProviderName="
+        + (runtimeProviderName == null ? "<none>" : runtimeProviderName)
         + '}';
   }
 
@@ -262,6 +283,7 @@ public final class BindgenConfig {
     private boolean generateBuilders = true;
     private boolean generateImplementations = true;
     private boolean generateServiceLoader = true;
+    private String runtimeProviderName;
 
     private Builder() {}
 
@@ -383,6 +405,24 @@ public final class BindgenConfig {
      */
     public Builder generateServiceLoader(final boolean generate) {
       this.generateServiceLoader = generate;
+      return this;
+    }
+
+    /**
+     * Sets the name of the runtime-provider SPI to emit (bindgen 2.0 mode).
+     *
+     * <p>Pass {@code null} (the default) for legacy behaviour: resource method bodies throw
+     * {@link UnsupportedOperationException}. Pass a non-null identifier (e.g. {@code
+     * "EmbedderRuntime"}) to emit a {@code <name>} SPI interface plus a {@code <name>Registry}
+     * class, and rewrite resource method bodies to dispatch through the registry.
+     *
+     * <p>Determinism is preserved in both modes; SPI method ordering follows WIT declaration order.
+     *
+     * @param name the runtime-provider interface name, or {@code null} to disable SPI dispatch
+     * @return this builder
+     */
+    public Builder runtimeProviderName(final String name) {
+      this.runtimeProviderName = name;
       return this;
     }
 

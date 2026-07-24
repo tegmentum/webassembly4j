@@ -110,6 +110,16 @@ public final class BindgenCli implements Callable<Integer> {
   private boolean noImpl;
 
   @Option(
+      names = {"--runtime-provider"},
+      description =
+          "Emit a runtime-provider SPI interface + registry (bindgen 2.0 dispatch mode). Resource"
+              + " method bodies will delegate to the installed provider instead of throwing"
+              + " UnsupportedOperationException. Give the SPI interface name (e.g."
+              + " 'EmbedderRuntime'). See docs/design-2.0.md.",
+      paramLabel = "NAME")
+  private String runtimeProviderName;
+
+  @Option(
       names = {"--verbose", "-v"},
       description = "Enable verbose output")
   private boolean verbose;
@@ -151,6 +161,7 @@ public final class BindgenCli implements Callable<Integer> {
               .generateBuilders(!noBuilders)
               .generateImplementations(!noImpl)
               .generateServiceLoader(!noImpl)
+              .runtimeProviderName(runtimeProviderName)
               .build();
 
       if (verbose) {
