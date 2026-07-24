@@ -21,23 +21,23 @@ public class RuntimeInstance implements AutoCloseable {
 
   @Override
   public void close() {
-    // Resource cleanup - to be implemented by runtime
+    EmbedderRuntimeRegistry.runtime().runtimeInstanceClose(this.handle);
   }
 
   public static WitResult<RuntimeInstance, Error> instantiate(List<Byte> componentBytes,
       List<ImportSatisfaction> imports) {
-    throw new UnsupportedOperationException("wasmos:host/embedder method dispatch not yet wired");
+    return EmbedderRuntimeRegistry.runtime().runtimeInstanceInstantiate(componentBytes, imports);
   }
 
   public WitResult<List<Byte>, Error> callExport(String name, List<Byte> args) {
-    throw new UnsupportedOperationException("wasmos:host/embedder method dispatch not yet wired");
+    return EmbedderRuntimeRegistry.runtime().runtimeInstanceCallExport(this.handle, name, args);
   }
 
   public String introspect() {
-    throw new UnsupportedOperationException("wasmos:host/embedder method dispatch not yet wired");
+    return EmbedderRuntimeRegistry.runtime().runtimeInstanceIntrospect(this.handle);
   }
 
   public WitResult<Void, Error> verifyWorld(String expectedWit) {
-    throw new UnsupportedOperationException("wasmos:host/embedder method dispatch not yet wired");
+    return EmbedderRuntimeRegistry.runtime().runtimeInstanceVerifyWorld(this.handle, expectedWit);
   }
 }

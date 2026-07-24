@@ -207,16 +207,23 @@ public final class ModernCodeGenerator extends JavaCodeGenerator {
     // Add handle field
     classBuilder.addField(TypeName.LONG, "handle", Modifier.PRIVATE, Modifier.FINAL);
 
-    // Emit the handle-holding constructor unless the WIT resource declared
-    // its own `constructor(...)`. When a WIT constructor is present it
-    // becomes the primary way callers get a handle; the handle-only ctor
-    // is still emitted as `protected` so subclasses / generated dispatch
-    // sites can wrap an existing handle.
+    // Emit the handle-holding constructor. When the WIT resource declared
+    // its own `constructor(...)`, the visibility depends on dispatch mode:
+    //   * Legacy (throwing bodies): protected — external callers must go
+    //     through the WIT `create(...)` factory; only subclasses (host
+    //     adapters) may wrap an existing raw handle.
+    //   * Bindgen 2.0 SPI-dispatch: public — the SPI impl lives outside
+    //     the generated package and must construct resources to fulfil
+    //     the `WitResult<Resource, Error> instantiate(...)` /
+    //     `Resource create(...)` contracts. The registry entry-point is
+    //     the enforcement boundary, not the ctor's visibility.
     final boolean hasWitConstructor =
         type.getResourceMethods().stream().anyMatch(BindgenFunction::isConstructor);
+    final Modifier ctorVis =
+        (hasWitConstructor && !isSpiDispatchMode()) ? Modifier.PROTECTED : Modifier.PUBLIC;
     classBuilder.addMethod(
         MethodSpec.constructorBuilder()
-            .addModifiers(hasWitConstructor ? Modifier.PROTECTED : Modifier.PUBLIC)
+            .addModifiers(ctorVis)
             .addParameter(TypeName.LONG, "handle")
             .addStatement("this.handle = handle")
             .build());
@@ -229,26 +236,35 @@ public final class ModernCodeGenerator extends JavaCodeGenerator {
             .addStatement("return this.handle")
             .build());
 
-    // Add close method
-    classBuilder.addMethod(
+    // Add close method. In bindgen 2.0 SPI-dispatch mode the body routes
+    // through the installed runtime provider; in the legacy mode it stays a
+    // no-op (matches bindgen 1.x behaviour that host adapters override).
+    final MethodSpec.Builder closeBuilder =
         MethodSpec.methodBuilder("close")
             .addModifiers(Modifier.PUBLIC)
-            .addAnnotation(Override.class)
-            .addComment("Resource cleanup - to be implemented by runtime")
-            .build());
+            .addAnnotation(Override.class);
+    if (isSpiDispatchMode()) {
+      closeBuilder.addStatement(
+          "$T.runtime().$L(this.handle)", registryClass(), RuntimeProviderCodeGenerator.dispatchCloseName(type.getName()));
+    } else {
+      closeBuilder.addComment("Resource cleanup - to be implemented by runtime");
+    }
+    classBuilder.addMethod(closeBuilder.build());
 
-    // Emit the resource's WIT-declared methods. Bodies throw
-    // UnsupportedOperationException — the SPI runtime wiring that would
-    // route these to the guest hasn't landed yet (ADR-005 tracks it), so
-    // the surface is correct even though dispatch is stubbed.
+    // Emit the resource's WIT-declared methods. In bindgen 2.0 SPI-dispatch
+    // mode bodies delegate to the installed runtime provider; in the legacy
+    // mode they throw UnsupportedOperationException with a "not yet wired"
+    // message, matching bindgen 1.x behaviour that the shape tests pin down.
     for (final BindgenFunction method : type.getResourceMethods()) {
-      classBuilder.addMethod(generateResourceMethod(className, method));
+      classBuilder.addMethod(generateResourceMethod(type.getName(), className, method));
     }
 
     return classBuilder.build();
   }
 
-  private MethodSpec generateResourceMethod(final String className, final BindgenFunction method) {
+  private MethodSpec generateResourceMethod(
+      final String resourceWitName, final String className, final BindgenFunction method) {
+    final boolean spi = isSpiDispatchMode();
     if (method.isConstructor()) {
       // Emit as a static factory `create` — matches the WIT constructor
       // shape (constructs a new resource from primitive args) but doesn't
@@ -260,10 +276,18 @@ public final class ModernCodeGenerator extends JavaCodeGenerator {
       for (BindgenParameter p : method.getParameters()) {
         factory.addParameter(mapType(p.getType()), JavaNaming.toParameterName(p.getName()));
       }
-      factory.addStatement(
-          "throw new $T($S)",
-          UnsupportedOperationException.class,
-          "wasmos:host/embedder constructor dispatch not yet wired");
+      if (spi) {
+        factory.addStatement(
+            "return $T.runtime().$L($L)",
+            registryClass(),
+            RuntimeProviderCodeGenerator.dispatchConstructorName(resourceWitName),
+            parameterForwardList(method));
+      } else {
+        factory.addStatement(
+            "throw new $T($S)",
+            UnsupportedOperationException.class,
+            "wasmos:host/embedder constructor dispatch not yet wired");
+      }
       return factory.build();
     }
     final String name = JavaNaming.toMethodName(method.getName());
@@ -274,18 +298,87 @@ public final class ModernCodeGenerator extends JavaCodeGenerator {
     for (BindgenParameter p : method.getParameters()) {
       mb.addParameter(mapType(p.getType()), JavaNaming.toParameterName(p.getName()));
     }
+    final String dispatchName =
+        RuntimeProviderCodeGenerator.dispatchMethodName(resourceWitName, method.getName());
     if (method.hasReturnType()) {
       mb.returns(mapType(method.getReturnType().get()));
-      mb.addStatement(
-          "throw new $T($S)",
-          UnsupportedOperationException.class,
-          "wasmos:host/embedder method dispatch not yet wired");
+      if (spi) {
+        if (method.isStatic()) {
+          mb.addStatement(
+              "return $T.runtime().$L($L)",
+              registryClass(),
+              dispatchName,
+              parameterForwardList(method));
+        } else {
+          mb.addStatement(
+              "return $T.runtime().$L(this.handle$L)",
+              registryClass(),
+              dispatchName,
+              parameterForwardListPrefixed(method));
+        }
+      } else {
+        mb.addStatement(
+            "throw new $T($S)",
+            UnsupportedOperationException.class,
+            "wasmos:host/embedder method dispatch not yet wired");
+      }
     } else {
-      mb.addStatement(
-          "throw new $T($S)",
-          UnsupportedOperationException.class,
-          "wasmos:host/embedder method dispatch not yet wired");
+      if (spi) {
+        if (method.isStatic()) {
+          mb.addStatement(
+              "$T.runtime().$L($L)",
+              registryClass(),
+              dispatchName,
+              parameterForwardList(method));
+        } else {
+          mb.addStatement(
+              "$T.runtime().$L(this.handle$L)",
+              registryClass(),
+              dispatchName,
+              parameterForwardListPrefixed(method));
+        }
+      } else {
+        mb.addStatement(
+            "throw new $T($S)",
+            UnsupportedOperationException.class,
+            "wasmos:host/embedder method dispatch not yet wired");
+      }
     }
     return mb.build();
+  }
+
+  private boolean isSpiDispatchMode() {
+    final String spi = config.getRuntimeProviderName();
+    return spi != null && !spi.isEmpty();
+  }
+
+  private ClassName registryClass() {
+    return ClassName.get(config.getPackageName(), config.getRuntimeProviderName() + "Registry");
+  }
+
+  private static String parameterForwardList(final BindgenFunction method) {
+    final StringBuilder sb = new StringBuilder();
+    boolean first = true;
+    for (BindgenParameter p : method.getParameters()) {
+      if (!first) {
+        sb.append(", ");
+      }
+      sb.append(JavaNaming.toParameterName(p.getName()));
+      first = false;
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Same as {@link #parameterForwardList} but always prefixed with a leading ", " so it can be
+   * concatenated after {@code this.handle} in the dispatch call site. Empty when the method takes
+   * no user-supplied parameters.
+   */
+  private static String parameterForwardListPrefixed(final BindgenFunction method) {
+    final String list = parameterForwardList(method);
+    if (list.isEmpty()) {
+      return "";
+    }
+    return ", " + list;
   }
 }

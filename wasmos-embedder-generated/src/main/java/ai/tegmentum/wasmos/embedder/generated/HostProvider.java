@@ -8,7 +8,7 @@ package ai.tegmentum.wasmos.embedder.generated;
 public class HostProvider implements AutoCloseable {
   private final long handle;
 
-  protected HostProvider(long handle) {
+  public HostProvider(long handle) {
     this.handle = handle;
   }
 
@@ -18,10 +18,10 @@ public class HostProvider implements AutoCloseable {
 
   @Override
   public void close() {
-    // Resource cleanup - to be implemented by runtime
+    EmbedderRuntimeRegistry.runtime().hostProviderClose(this.handle);
   }
 
   public static HostProvider create(String interfaceName, int numFuncs) {
-    throw new UnsupportedOperationException("wasmos:host/embedder constructor dispatch not yet wired");
+    return EmbedderRuntimeRegistry.runtime().hostProviderCreate(interfaceName, numFuncs);
   }
 }

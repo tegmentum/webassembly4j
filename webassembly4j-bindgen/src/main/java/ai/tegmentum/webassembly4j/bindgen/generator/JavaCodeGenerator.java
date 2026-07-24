@@ -88,6 +88,31 @@ public abstract class JavaCodeGenerator {
       sources.addAll(implGen.generate(model.getInterfaces()));
     }
 
+    // Bindgen 2.0: emit runtime-provider SPI + registry when configured.
+    // The SPI dispatches every method on every resource type in the model
+    // (world-level + interface-level), so the embedder writes one impl and
+    // generated resource bodies delegate to the installed provider.
+    if (config.getRuntimeProviderName() != null && !config.getRuntimeProviderName().isEmpty()) {
+      final List<BindgenType> resources = new ArrayList<>();
+      for (BindgenType type : model.getTypes()) {
+        if (type.getKind() == BindgenType.Kind.RESOURCE) {
+          resources.add(type);
+        }
+      }
+      for (BindgenInterface iface : model.getInterfaces()) {
+        for (BindgenType type : iface.getTypes()) {
+          if (type.getKind() == BindgenType.Kind.RESOURCE) {
+            resources.add(type);
+          }
+        }
+      }
+      if (!resources.isEmpty()) {
+        final RuntimeProviderCodeGenerator spiGen = new RuntimeProviderCodeGenerator(config);
+        sources.add(spiGen.generateInterface(resources));
+        sources.add(spiGen.generateRegistry());
+      }
+    }
+
     return sources;
   }
 
