@@ -32,10 +32,15 @@ public final class WitFunction {
   private final List<WitParameter> parameters;
   private final List<WitType> returnTypes;
   private final boolean isAsync;
+  private final boolean isConstructor;
+  private final boolean isStatic;
   private final Optional<String> documentation;
 
   /**
-   * Creates a new WIT function definition.
+   * Creates a new plain-function WIT function definition. Neither a
+   * constructor nor a static method; use
+   * {@link #resourceMethod(String, List, List, boolean, boolean, boolean, Optional)}
+   * for those.
    *
    * @param name the function name
    * @param parameters the function parameters
@@ -49,10 +54,45 @@ public final class WitFunction {
       final List<WitType> returnTypes,
       final boolean isAsync,
       final Optional<String> documentation) {
+    this(name, parameters, returnTypes, isAsync, false, false, documentation);
+  }
+
+  /**
+   * Creates a new WIT function definition with resource-method flags carried
+   * through translation. Used by {@link WitResourceBodyParser} so the
+   * constructor / static / instance distinction survives into the
+   * downstream {@link ai.tegmentum.webassembly4j.bindgen.model.BindgenFunction}
+   * without a separate translation path.
+   */
+  public static WitFunction resourceMethod(
+      final String name,
+      final List<WitParameter> parameters,
+      final List<WitType> returnTypes,
+      final boolean isConstructor,
+      final boolean isStatic,
+      final boolean isAsync,
+      final Optional<String> documentation) {
+    if (isConstructor && isStatic) {
+      throw new IllegalArgumentException(
+          "resource method " + name + " cannot be both a constructor and a static method");
+    }
+    return new WitFunction(name, parameters, returnTypes, isAsync, isConstructor, isStatic, documentation);
+  }
+
+  private WitFunction(
+      final String name,
+      final List<WitParameter> parameters,
+      final List<WitType> returnTypes,
+      final boolean isAsync,
+      final boolean isConstructor,
+      final boolean isStatic,
+      final Optional<String> documentation) {
     this.name = Objects.requireNonNull(name);
     this.parameters = List.copyOf(Objects.requireNonNull(parameters));
     this.returnTypes = List.copyOf(Objects.requireNonNull(returnTypes));
     this.isAsync = isAsync;
+    this.isConstructor = isConstructor;
+    this.isStatic = isStatic;
     this.documentation = Objects.requireNonNull(documentation);
   }
 
@@ -90,6 +130,26 @@ public final class WitFunction {
    */
   public boolean isAsync() {
     return isAsync;
+  }
+
+  /**
+   * True when this WIT function represents a {@code constructor(...)}
+   * declaration inside a {@code resource} body. Populated during parsing
+   * (see {@link WitResourceBodyParser}) so downstream translation can lift
+   * the flag onto {@link ai.tegmentum.webassembly4j.bindgen.model.BindgenFunction}
+   * without a separate resource-method path.
+   */
+  public boolean isConstructor() {
+    return isConstructor;
+  }
+
+  /**
+   * True when this WIT function represents a {@code name: static func(...)}
+   * declaration inside a {@code resource} body. Mutually exclusive with
+   * {@link #isConstructor()}.
+   */
+  public boolean isStatic() {
+    return isStatic;
   }
 
   /**
