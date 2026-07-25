@@ -59,10 +59,10 @@ public final class WitFunction {
 
   /**
    * Creates a new WIT function definition with resource-method flags carried
-   * through translation. Used by {@link WitResourceBodyParser} so the
-   * constructor / static / instance distinction survives into the
-   * downstream {@link ai.tegmentum.webassembly4j.bindgen.model.BindgenFunction}
-   * without a separate translation path.
+   * through translation. Used by {@link WitParser} so the constructor /
+   * static / instance distinction survives into the downstream
+   * {@link ai.tegmentum.webassembly4j.bindgen.model.BindgenFunction} without
+   * a separate translation path.
    */
   public static WitFunction resourceMethod(
       final String name,
@@ -135,7 +135,7 @@ public final class WitFunction {
   /**
    * True when this WIT function represents a {@code constructor(...)}
    * declaration inside a {@code resource} body. Populated during parsing
-   * (see {@link WitResourceBodyParser}) so downstream translation can lift
+   * (see {@link WitParser}) so downstream translation can lift
    * the flag onto {@link ai.tegmentum.webassembly4j.bindgen.model.BindgenFunction}
    * without a separate resource-method path.
    */

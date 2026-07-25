@@ -27,14 +27,12 @@ import ai.tegmentum.webassembly4j.bindgen.model.BindgenModel;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenParameter;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenType;
 import ai.tegmentum.webassembly4j.bindgen.model.BindgenVariantCase;
-import ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceParser;
+import ai.tegmentum.webassembly4j.bindgen.wit.WitDocument;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitFunction;
-import ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceDefinition;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitParameter;
-import ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser;
+import ai.tegmentum.webassembly4j.bindgen.wit.WitParser;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitType;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitTypeCategory;
-import ai.tegmentum.webassembly4j.bindgen.wit.WitWorldPreprocessor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -169,36 +167,33 @@ public final class CodeGenerator {
       final String packageName =
           config.getPackageName() != null ? config.getPackageName() : "generated";
 
-      // Fan a full WIT world source (package + world + multiple
-      // interfaces + resource bodies) out into per-interface entries
-      // the existing single-interface WIT parser can consume.
-      final List<WitWorldPreprocessor.Interface> preprocessed =
-          WitWorldPreprocessor.preprocess(witText);
+      // One-pass native parse: token stream + recursive descent covers
+      // package / world / multi-interface / use / import / export /
+      // resource-body / type-alias / record / variant / enum / flags /
+      // list / option / result / tuple / borrow / own. The old
+      // regex-parser + WitWorldPreprocessor + WitResourceBodyParser
+      // stack (task 56) has retired; this call takes its place.
+      final WitDocument document = WitParser.parse(witText);
 
-      // Fall back to legacy single-interface parsing if the input
-      // wasn't a multi-interface world (e.g. tests that pass a bare
-      // `interface X { ... }`).
-      final List<WitWorldPreprocessor.Interface> interfacesToParse;
-      if (preprocessed.isEmpty()) {
-        return parseWitSourceLegacy(witPath, witText, packageName);
+      if (document.getInterfaces().isEmpty()) {
+        throw new BindgenException(
+            "WIT file " + witPath + " contains no interface or world declarations");
       }
-      interfacesToParse = preprocessed;
 
       final BindgenModel.Builder modelBuilder =
-          BindgenModel.builder().name(witPath.getFileName().toString()).sourceFile(witPath.toString());
+          BindgenModel.builder()
+              .name(witPath.getFileName().toString())
+              .sourceFile(witPath.toString());
 
-      for (final WitWorldPreprocessor.Interface pre : interfacesToParse) {
-        final String reconstructed = "interface " + pre.getName() + " {\n" + pre.getBody() + "\n}\n";
-        final WitInterfaceParser parser = new WitInterfaceParser();
-        final WitInterfaceDefinition definition = parser.parseInterface(reconstructed, packageName);
-
+      for (final WitDocument.ParsedInterface pi : document.getInterfaces()) {
         // LinkedHashMap preserves WIT declaration order for cross-JVM
-    // deterministic generation. See WitInterfaceParser.parseTypes.
-    final Map<String, BindgenType> convertedTypes = new java.util.LinkedHashMap<>();
-        for (final Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
+        // deterministic generation. See the note on
+        // WitDocument.ParsedInterface for why order is load-bearing.
+        final Map<String, BindgenType> convertedTypes = new java.util.LinkedHashMap<>();
+        for (final Map.Entry<String, WitType> entry : pi.getTypes().entrySet()) {
           BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
           if (bindgenType.getKind() == BindgenType.Kind.RESOURCE
-              && pre.getResourceBodies().containsKey(entry.getKey())) {
+              && pi.getResourceMethods().containsKey(entry.getKey())) {
             final BindgenType.Builder rebuilt =
                 BindgenType.builder()
                     .name(bindgenType.getName())
@@ -206,13 +201,10 @@ public final class CodeGenerator {
                     .documentation(bindgenType.getDocumentation().orElse(null));
             // Resource-body methods flow through the same WitFunction
             // translation as interface-level functions — the WitFunctions
-            // carry the isConstructor / isStatic flags set by
-            // WitResourceBodyParser, and convertWitFunction lifts them onto
-            // BindgenFunction. Single translation path, no side-channel.
-            final List<WitFunction> methods =
-                WitResourceBodyParser.parse(
-                    entry.getKey(), pre.getResourceBodies().get(entry.getKey()));
-            for (final WitFunction m : methods) {
+            // carry the isConstructor / isStatic flags set at parse time,
+            // and convertWitFunction lifts them onto BindgenFunction.
+            // Single translation path, no side-channel.
+            for (final WitFunction m : pi.getResourceMethods().get(entry.getKey())) {
               rebuilt.addResourceMethod(convertWitFunction(m, convertedTypes));
             }
             bindgenType = rebuilt.build();
@@ -221,13 +213,11 @@ public final class CodeGenerator {
         }
 
         final List<BindgenFunction> convertedFunctions = new ArrayList<>();
-        for (final Map.Entry<String, WitFunction> entry : definition.getFunctions().entrySet()) {
-          final BindgenFunction bindgenFunc =
-              convertWitFunction(entry.getValue(), convertedTypes);
-          convertedFunctions.add(bindgenFunc);
+        for (final Map.Entry<String, WitFunction> entry : pi.getFunctions().entrySet()) {
+          convertedFunctions.add(convertWitFunction(entry.getValue(), convertedTypes));
         }
 
-        if (pre.isWorld()) {
+        if (pi.isWorld()) {
           // A hoisted `world X { ... }` block declares types + resources at
           // the top level (per ADR-006). It has no functions of its own —
           // its `import`/`export` clauses reference already-declared
@@ -243,7 +233,7 @@ public final class CodeGenerator {
           }
         } else {
           final BindgenInterface.Builder ifaceBuilder =
-              BindgenInterface.builder().name(definition.getName()).packageName(packageName);
+              BindgenInterface.builder().name(pi.getName()).packageName(packageName);
           for (final BindgenFunction func : convertedFunctions) {
             ifaceBuilder.addFunction(func);
           }
@@ -260,41 +250,6 @@ public final class CodeGenerator {
     } catch (final BindgenException e) {
       throw new BindgenException("Failed to parse WIT file: " + witPath, e);
     }
-  }
-
-  private BindgenModel parseWitSourceLegacy(
-      final Path witPath, final String witText, final String packageName)
-      throws BindgenException {
-    final WitInterfaceParser parser = new WitInterfaceParser();
-    final WitInterfaceDefinition definition = parser.parseInterface(witText, packageName);
-
-    final BindgenModel.Builder modelBuilder =
-        BindgenModel.builder().name(definition.getName()).sourceFile(witPath.toString());
-
-    // LinkedHashMap preserves WIT declaration order for cross-JVM
-    // deterministic generation. See WitInterfaceParser.parseTypes.
-    final Map<String, BindgenType> convertedTypes = new java.util.LinkedHashMap<>();
-    for (final Map.Entry<String, WitType> entry : definition.getTypes().entrySet()) {
-      final BindgenType bindgenType = convertWitType(entry.getKey(), entry.getValue());
-      convertedTypes.put(entry.getKey(), bindgenType);
-    }
-
-    final List<BindgenFunction> convertedFunctions = new ArrayList<>();
-    for (final Map.Entry<String, WitFunction> entry : definition.getFunctions().entrySet()) {
-      final BindgenFunction bindgenFunc = convertWitFunction(entry.getValue(), convertedTypes);
-      convertedFunctions.add(bindgenFunc);
-    }
-
-    final BindgenInterface.Builder ifaceBuilder =
-        BindgenInterface.builder().name(definition.getName()).packageName(packageName);
-    for (final BindgenFunction func : convertedFunctions) {
-      ifaceBuilder.addFunction(func);
-    }
-    for (final BindgenType type : convertedTypes.values()) {
-      ifaceBuilder.addType(type);
-    }
-    modelBuilder.addInterface(ifaceBuilder.build());
-    return modelBuilder.build();
   }
 
   /**
@@ -562,12 +517,10 @@ public final class CodeGenerator {
   /**
    * Converts a WIT function to a bindgen function.
    *
-   * <p>Handles both interface-level functions (parsed by
-   * {@link ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceParser}, fully-
-   * typed) and resource-body methods (parsed by
-   * {@link ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser},
-   * with parameter and return types carried as raw expression placeholders).
-   * The {@link WitFunction#isConstructor()} / {@link WitFunction#isStatic()}
+   * <p>Handles both interface-level functions and resource-body methods —
+   * both come out of {@link ai.tegmentum.webassembly4j.bindgen.wit.WitParser}
+   * with the same {@link WitFunction} shape, and the
+   * {@link WitFunction#isConstructor()} / {@link WitFunction#isStatic()}
    * flags flow directly onto the {@link BindgenFunction} without a separate
    * translation path.
    *
@@ -624,11 +577,12 @@ public final class CodeGenerator {
    * <ol>
    *   <li>{@code name} matches a previously converted type — emit a reference.
    *   <li>{@code witType} is a raw type-expression placeholder produced by
-   *       {@link ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser}
-   *       (a RESOURCE-kinded WitType whose name is the raw WIT source of the
-   *       type expression) — resolve via {@link #resolveTypeExpression} so
-   *       container forms like {@code list<u8>} / {@code borrow<X>} /
-   *       {@code result<T, E>} land correctly.
+   *       {@link ai.tegmentum.webassembly4j.bindgen.wit.WitParser} for a
+   *       named reference not yet in the type table (a RESOURCE-kinded
+   *       WitType whose name is the raw WIT source of the type expression)
+   *       — resolve via {@link #resolveTypeExpression} so container forms
+   *       like {@code list<u8>} / {@code borrow<X>} / {@code result<T, E>}
+   *       land correctly.
    *   <li>Otherwise, fall through to the normal WIT-to-bindgen conversion.
    * </ol>
    *
@@ -644,17 +598,14 @@ public final class CodeGenerator {
     if (known != null) {
       return BindgenType.reference(name);
     }
-    // Detect a WitResourceBodyParser-produced raw-expression placeholder:
-    // the parser wraps every parameter and return type in
+    // Detect a WitParser-produced unresolved named-reference placeholder:
+    // the parser emits every non-primitive named type as
     // WitType.resource(rawExpr, rawExpr), so `witType` is RESOURCE-kinded
     // with a name matching the untranslated WIT source. Route those through
-    // resolveTypeExpression so container forms (list<T>, option<T>,
-    // result<T, E>, borrow<X>, own<X>) resolve, and plain primitives
-    // (`u32`, `string`, ...) land as primitives instead of opaque
-    // resources. Existing WitInterfaceParser output for a genuine unknown-
-    // resource reference also lands here — resolveTypeExpression falls
-    // back to BindgenType.reference for anything it can't classify, which
-    // matches the pre-refactor behaviour for those cases.
+    // resolveTypeExpression so container forms already resolved as
+    // WitType.list / WitType.option etc. stay resolved via convertWitType,
+    // while genuine unknown-resource references fall back to
+    // BindgenType.reference — matching pre-refactor behaviour.
     if (witType != null && witType.getKind().getCategory() == WitTypeCategory.RESOURCE) {
       return resolveTypeExpression(name, knownTypes);
     }
