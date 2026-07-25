@@ -160,11 +160,13 @@ class ImplementationCodeGeneratorBugsTest {
 
   @Test
   @DisplayName(
-      "bug 2: a result<T, E> return no longer emits a comment where an expression must go")
+      "bug 2: a result<T, E> return dispatches on the Canonical-ABI discriminant")
   void resultReturnEmitsCompileableBody() throws Exception {
     // call-export: func(name: string) -> result<string, error>
-    // We use string on both sides so we don't depend on the list<u8>
-    // lowering bug (out of scope for this round).
+    // The ok arm is a `string` (in-memory lifter wired); the err arm is a
+    // record reference — payload lifting for records isn't in this cut, so
+    // that arm falls back to a specific-tag throw. The dispatch shape is
+    // real.
     final BindgenInterface iface =
         BindgenInterface.builder()
             .name("runtime-instance")
@@ -185,20 +187,93 @@ class ImplementationCodeGeneratorBugsTest {
     assertFalse(
         content.contains("return /* TODO: lift RESULT */"),
         "result<T, E> body must not emit a bare TODO comment in return position:\n" + content);
-    // The honest placeholder for the currently-unwired discriminant lift is
-    // an UnsupportedOperationException throw — compileable, obviously not a
-    // working runtime path, easy to swap when the marshalling lands.
-    assertTrue(
-        content.contains("throw new UnsupportedOperationException"),
-        "expected an UnsupportedOperationException throw as the placeholder body:\n" + content);
-    assertTrue(
+    // The previous placeholder was a whole-body throw. Real dispatch has an
+    // if/else on the tag; the whole-body throw is gone.
+    assertFalse(
         content.contains("TODO(bindgen): result<T,E>"),
-        "expected the throw message to reference the ADR-005 gap:\n" + content);
-    // The method signature is still generated correctly — only the body
-    // changed. WitResult<String, Error> is what the type map produces here.
+        "expected the whole-body TODO throw to be replaced by real dispatch:\n" + content);
+    // Canonical-ABI discriminant read from the retptr, then branch on it.
+    assertTrue(
+        content.contains("marshal.reader().readU8("),
+        "expected a u8 discriminant read from the retptr:\n" + content);
+    assertTrue(
+        content.contains("if (tag$ == 0)"),
+        "expected an `if (tag$ == 0)` dispatch on the discriminant:\n" + content);
+    // Ok arm lifts a string from `retptr + payloadOffset` (payload alignment
+    // for `string` is 4, so payload offset is 4).
+    assertTrue(
+        content.contains("WitResult.ok(marshal.reader().readString"),
+        "expected the ok arm to lift a string via readString:\n" + content);
+    // Err arm can't lift a record payload today; specific-tag throw
+    // documents the gap without pretending the arm works.
+    assertTrue(
+        content.contains("err-arm payload lift for REFERENCE"),
+        "expected the err arm to throw with a REFERENCE-payload TODO:\n" + content);
+    // The method signature is still generated correctly.
     assertTrue(
         content.contains("public WitResult<String, Error> callExport"),
         "expected the WitResult<String, Error> return type on callExport:\n" + content);
+
+    compileImpl(iface, impl);
+  }
+
+  @Test
+  @DisplayName(
+      "bug 2 (companion): a result<_, E> return returns WitResult.ok(null) in the ok arm")
+  void resultReturnWithUnitOkPayload() throws Exception {
+    // verify-world: func(expected-wit: string) -> result<_, error>
+    // Ok payload is unit; the ok arm returns WitResult.ok(null). Err arm
+    // still falls back to a REFERENCE-payload throw.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("runtime-instance")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("verify-world")
+                    .addParameter("expected-wit", BindgenType.primitive("string"))
+                    .returnType(BindgenType.result(null, BindgenType.reference("error")))
+                    .build())
+            .build();
+
+    final GeneratedSource impl = generator().generate(Collections.singletonList(iface)).get(0);
+    final String content = impl.getContent();
+
+    assertTrue(
+        content.contains("return WitResult.ok(null)"),
+        "expected the unit-ok arm to return WitResult.ok(null):\n" + content);
+    assertTrue(
+        content.contains("public WitResult<Void, Error> verifyWorld"),
+        "expected the WitResult<Void, Error> return type on verifyWorld:\n" + content);
+
+    compileImpl(iface, impl);
+  }
+
+  @Test
+  @DisplayName(
+      "bug 2 (companion): a result<i32, _> return lifts the ok arm from the payload offset")
+  void resultReturnPrimitiveOkPayload() throws Exception {
+    // Simplest ok-arm shape: primitive payload lifts via a bare
+    // readI32 at the aligned payload offset. Unit err arm returns null.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("counter")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("current")
+                    .addParameter("name", BindgenType.primitive("string"))
+                    .returnType(BindgenType.result(BindgenType.primitive("i32"), null))
+                    .build())
+            .build();
+
+    final GeneratedSource impl = generator().generate(Collections.singletonList(iface)).get(0);
+    final String content = impl.getContent();
+
+    assertTrue(
+        content.contains("WitResult.ok(marshal.reader().readI32"),
+        "expected the ok arm to lift an int via readI32:\n" + content);
+    assertTrue(
+        content.contains("return WitResult.err(null)"),
+        "expected the unit-err arm to return WitResult.err(null):\n" + content);
 
     compileImpl(iface, impl);
   }
@@ -215,7 +290,10 @@ class ImplementationCodeGeneratorBugsTest {
           "\n",
           "package " + PACKAGE + ";",
           "import java.util.Optional;",
-          "// api package stubs — signatures cribbed from webassembly4j-api.",
+          "// api package stubs — signatures cribbed from webassembly4j-api and",
+          "// webassembly4j-runtime. Every symbol the generator names must exist",
+          "// here or javac drops the whole test. New reader methods land here",
+          "// alongside the generator changes that reference them.",
           "class ApiStubs {",
           "  public interface Instance {",
           "    Optional<Function> function(String name);",
@@ -228,6 +306,12 @@ class ImplementationCodeGeneratorBugsTest {
           "  public static class MemoryReader {",
           "    public String readString(int offset) { return null; }",
           "    public byte[] readBytes(int offset) { return null; }",
+          "    public int readU8(int offset) { return 0; }",
+          "    public boolean readBool(int offset) { return false; }",
+          "    public int readI32(int offset) { return 0; }",
+          "    public long readI64(int offset) { return 0L; }",
+          "    public float readF32(int offset) { return 0f; }",
+          "    public double readF64(int offset) { return 0d; }",
           "  }",
           "  public static class MarshalContext {",
           "    public static MarshalContext fromInstance(Instance i) { return new MarshalContext(); }",

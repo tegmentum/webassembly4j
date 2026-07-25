@@ -43,6 +43,22 @@ public final class MemoryReader {
     }
 
     /**
+     * Reads an unsigned 8-bit integer from the given offset.
+     *
+     * <p>Returned as an {@code int} in the range {@code 0..255} — the natural
+     * shape for a Canonical-ABI discriminant read on {@code variant} / {@code
+     * option} / {@code result} lifts, which stash the tag in a single byte at
+     * the payload's base offset. Callers pattern-match on the return.
+     *
+     * @param offset the byte offset in linear memory
+     * @return the byte value as an unsigned int (0..255)
+     */
+    public int readU8(int offset) {
+        memory.read(offset, 1, scratchArray, 0);
+        return scratchArray[0] & 0xFF;
+    }
+
+    /**
      * Reads a 32-bit integer from the given offset (little-endian).
      *
      * @param offset the byte offset in linear memory

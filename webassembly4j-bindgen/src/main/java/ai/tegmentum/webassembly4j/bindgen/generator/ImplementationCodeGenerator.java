@@ -337,25 +337,8 @@ public final class ImplementationCodeGenerator {
   private void generateMarshallingBody(MethodSpec.Builder method, BindgenFunction function,
                                         String fieldName, TypeName returnType, boolean hasReturn) {
     BindgenType returnBindgenType = hasReturn ? function.getReturnType().get() : null;
-
-    // TODO(bindgen): result<T, E> return marshalling requires a Canonical-ABI
-    // discriminant lift (tag byte followed by either ok- or err-payload
-    // slots) that MarshallingStrategy#liftReturn doesn't emit today — the
-    // default arm of that switch produces the literal `/* TODO: lift RESULT */`,
-    // which is a comment, not an expression, so `return <that>;` will not
-    // compile. Until the discriminant lift lands (ADR-005 resource/result
-    // codegen), emit a throw so the class stays compileable and the impl can
-    // be wired up incrementally. Parameters, return type, and the resource /
-    // interface shape are correct; only the body is a placeholder.
-    if (returnBindgenType != null && returnBindgenType.getKind() == BindgenType.Kind.RESULT) {
-      method.addStatement(
-          "throw new $T($S)",
-          UnsupportedOperationException.class,
-          "TODO(bindgen): result<T,E> marshalling not yet wired for "
-              + function.getName()
-              + " — see MarshallingStrategy#liftReturn");
-      return;
-    }
+    final boolean isResultReturn =
+        returnBindgenType != null && returnBindgenType.getKind() == BindgenType.Kind.RESULT;
 
     boolean complexReturn = MarshallingStrategy.requiresMarshalling(returnBindgenType);
 
@@ -381,9 +364,17 @@ public final class ImplementationCodeGenerator {
 
     method.addStatement("java.util.List<Object> $L = new java.util.ArrayList<>()", argsLocal);
 
-    // Allocate return pointer for complex returns
+    // Allocate return pointer for complex returns. For result<T, E> the
+    // Canonical-ABI layout is `[tag: u8][pad][payload]` — payload alignment
+    // is max(align(T), align(E)); total size = payloadOffset + max(size(T),
+    // size(E)) rounded up to alignment. Falling back to the historical
+    // (size=8, align=4) reservation for other complex returns is safe for
+    // (ptr, len) pairs, i64 primitives, and single u32 handles — the
+    // pre-refactor shape.
     if (complexReturn) {
-      method.addStatement("int $L = marshal.allocator().allocate(8, 4)", retptrLocal);
+      final int retSize = MarshallingStrategy.retptrSize(returnBindgenType);
+      final int retAlign = MarshallingStrategy.retptrAlignment(returnBindgenType);
+      method.addStatement("int $L = marshal.allocator().allocate($L, $L)", retptrLocal, retSize, retAlign);
       method.addStatement("$L.add($L)", argsLocal, retptrLocal);
     }
 
@@ -408,7 +399,16 @@ public final class ImplementationCodeGenerator {
 
     // Lift return
     if (hasReturn) {
-      if (complexReturn) {
+      if (isResultReturn) {
+        // Canonical-ABI discriminant lift: read tag byte at retptr, branch
+        // on 0 (ok) vs 1 (err), lift the payload from the aligned payload
+        // slot, and return a WitResult of the appropriate side. Payload
+        // types that lack an in-memory lifter throw an
+        // UnsupportedOperationException in that arm — the dispatch shape is
+        // real; per-arm marshalling gaps are honest.
+        method.addCode(
+            MarshallingStrategy.resultDispatch(returnBindgenType, retptrLocal, function.getName()));
+      } else if (complexReturn) {
         CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, retptrLocal);
         method.addStatement("return $L", liftCode);
       } else {
