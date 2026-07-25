@@ -18,12 +18,12 @@ package ai.tegmentum.webassembly4j.bindgen.wit;
 import ai.tegmentum.webassembly4j.bindgen.BindgenException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
  * Parses the body of a WIT {@code resource} declaration into a list of
- * {@link WitResourceMethod}s.
+ * {@link WitFunction}s carrying the {@link WitFunction#isConstructor()} /
+ * {@link WitFunction#isStatic()} flags.
  *
  * <p>Understands the three declaration shapes:
  *
@@ -40,75 +40,35 @@ import java.util.Optional;
  * because the interface parser's regex machinery can't cleanly express
  * the {@code constructor}/{@code static func} shapes; keeping it separate
  * makes the split cheap to grow.
+ *
+ * <p>Parameter and return WitTypes are carried as raw type expressions
+ * wrapped in {@link WitType#resource(String, String)} placeholders — the
+ * WIT symbol table isn't visible at this scope, so type resolution is
+ * deferred to the downstream translation pass (see
+ * {@code CodeGenerator.convertWitFunction}). This lets a single
+ * {@link WitFunction} translation path serve both interface-level functions
+ * and resource-body methods.
  */
 public final class WitResourceBodyParser {
 
   private WitResourceBodyParser() {}
 
   /**
-   * A single method declaration on a resource, retaining enough shape for
-   * downstream Java code generation to decide static vs instance vs
-   * constructor emission.
-   */
-  public static final class WitResourceMethod {
-    private final String name;
-    private final Kind kind;
-    private final List<WitParameter> parameters;
-    private final Optional<String> returnTypeExpression;
-
-    WitResourceMethod(
-        final String name,
-        final Kind kind,
-        final List<WitParameter> parameters,
-        final Optional<String> returnTypeExpression) {
-      this.name = Objects.requireNonNull(name, "name");
-      this.kind = Objects.requireNonNull(kind, "kind");
-      this.parameters = List.copyOf(Objects.requireNonNull(parameters, "parameters"));
-      this.returnTypeExpression = Objects.requireNonNull(returnTypeExpression, "returnTypeExpression");
-    }
-
-    public String getName() {
-      return name;
-    }
-
-    public Kind getKind() {
-      return kind;
-    }
-
-    public List<WitParameter> getParameters() {
-      return parameters;
-    }
-
-    /**
-     * The raw return-type expression as written in the WIT source, or empty
-     * if the method returned no value. Kept as text so the downstream
-     * pipeline can resolve it against the interface's already-parsed type
-     * table.
-     */
-    public Optional<String> getReturnTypeExpression() {
-      return returnTypeExpression;
-    }
-
-    public enum Kind {
-      CONSTRUCTOR,
-      STATIC,
-      INSTANCE
-    }
-  }
-
-  /**
-   * Parse the body text of a WIT resource declaration.
+   * Parse the body text of a WIT resource declaration into a list of
+   * {@link WitFunction}s. Constructor / static / instance shape is captured
+   * on {@link WitFunction#isConstructor()} / {@link WitFunction#isStatic()};
+   * both {@code false} means an instance method.
    *
    * @param resourceName the name of the resource (used for diagnostics)
    * @param body the body between the resource's outer braces
    * @return the parsed methods, in declaration order
    * @throws BindgenException if the body cannot be parsed
    */
-  public static List<WitResourceMethod> parse(final String resourceName, final String body)
+  public static List<WitFunction> parse(final String resourceName, final String body)
       throws BindgenException {
     final String stripped = stripLineComments(body);
     final List<String> decls = splitDeclarations(stripped);
-    final List<WitResourceMethod> methods = new ArrayList<>();
+    final List<WitFunction> methods = new ArrayList<>();
     for (final String decl : decls) {
       final String trimmed = decl.trim();
       if (trimmed.isEmpty()) {
@@ -184,7 +144,7 @@ public final class WitResourceBodyParser {
     return out;
   }
 
-  private static WitResourceMethod parseDeclaration(final String resourceName, final String decl)
+  private static WitFunction parseDeclaration(final String resourceName, final String decl)
       throws BindgenException {
     if (decl.startsWith("constructor")) {
       final int open = decl.indexOf('(');
@@ -194,10 +154,13 @@ public final class WitResourceBodyParser {
             "Malformed constructor on resource " + resourceName + ": " + decl);
       }
       final String params = decl.substring(open + 1, close);
-      return new WitResourceMethod(
+      return WitFunction.resourceMethod(
           "constructor",
-          WitResourceMethod.Kind.CONSTRUCTOR,
           parseParameters(params),
+          List.of(),
+          /* isConstructor= */ true,
+          /* isStatic= */ false,
+          /* isAsync= */ false,
           Optional.empty());
     }
     final int colon = decl.indexOf(':');
@@ -221,15 +184,25 @@ public final class WitResourceBodyParser {
     }
     final String params = afterStatic.substring(open + 1, close);
     final String tail = afterStatic.substring(close + 1).trim();
-    Optional<String> returnExpr = Optional.empty();
+    // Carry the raw return-type expression as a WitType.resource placeholder;
+    // downstream translation (CodeGenerator.convertWitFunction) resolves the
+    // expression against the interface's already-materialized type table via
+    // the same resolveTypeExpression path used for parameters.
+    final List<WitType> returnTypes;
     if (tail.startsWith("->")) {
-      returnExpr = Optional.of(tail.substring(2).trim());
+      final String returnExpr = tail.substring(2).trim();
+      returnTypes = List.of(WitType.resource(returnExpr, returnExpr));
+    } else {
+      returnTypes = List.of();
     }
-    return new WitResourceMethod(
+    return WitFunction.resourceMethod(
         name,
-        isStatic ? WitResourceMethod.Kind.STATIC : WitResourceMethod.Kind.INSTANCE,
         parseParameters(params),
-        returnExpr);
+        returnTypes,
+        /* isConstructor= */ false,
+        isStatic,
+        /* isAsync= */ false,
+        Optional.empty());
   }
 
   private static int findMatchingParen(final String s, final int open) {

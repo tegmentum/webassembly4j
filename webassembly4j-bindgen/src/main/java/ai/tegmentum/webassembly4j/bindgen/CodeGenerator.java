@@ -32,7 +32,6 @@ import ai.tegmentum.webassembly4j.bindgen.wit.WitFunction;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceDefinition;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitParameter;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser;
-import ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser.WitResourceMethod;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitType;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitTypeCategory;
 import ai.tegmentum.webassembly4j.bindgen.wit.WitWorldPreprocessor;
@@ -205,11 +204,16 @@ public final class CodeGenerator {
                     .name(bindgenType.getName())
                     .kind(BindgenType.Kind.RESOURCE)
                     .documentation(bindgenType.getDocumentation().orElse(null));
-            final List<WitResourceMethod> methods =
+            // Resource-body methods flow through the same WitFunction
+            // translation as interface-level functions — the WitFunctions
+            // carry the isConstructor / isStatic flags set by
+            // WitResourceBodyParser, and convertWitFunction lifts them onto
+            // BindgenFunction. Single translation path, no side-channel.
+            final List<WitFunction> methods =
                 WitResourceBodyParser.parse(
                     entry.getKey(), pre.getResourceBodies().get(entry.getKey()));
-            for (final WitResourceMethod m : methods) {
-              rebuilt.addResourceMethod(convertResourceMethod(m, convertedTypes));
+            for (final WitFunction m : methods) {
+              rebuilt.addResourceMethod(convertWitFunction(m, convertedTypes));
             }
             bindgenType = rebuilt.build();
           }
@@ -291,32 +295,6 @@ public final class CodeGenerator {
     }
     modelBuilder.addInterface(ifaceBuilder.build());
     return modelBuilder.build();
-  }
-
-  /**
-   * Convert a parsed WIT resource method into a {@link BindgenFunction}. Type
-   * expressions in parameters and the return position are resolved against the
-   * interface's already-materialized type table. Anything unresolved falls back
-   * to an opaque reference — bindgen doesn't run a full second-pass symbol
-   * table today, so cross-resource references need the caller to have declared
-   * the sibling resource first.
-   */
-  private BindgenFunction convertResourceMethod(
-      final WitResourceMethod method, final Map<String, BindgenType> knownTypes) {
-    final BindgenFunction.Builder builder =
-        BindgenFunction.builder()
-            .name(method.getName())
-            .constructor(method.getKind() == WitResourceMethod.Kind.CONSTRUCTOR)
-            .staticMethod(method.getKind() == WitResourceMethod.Kind.STATIC);
-    for (final WitParameter p : method.getParameters()) {
-      builder.addParameter(
-          new BindgenParameter(p.getName(), resolveTypeExpression(p.getType().getName(), knownTypes)));
-    }
-    if (method.getReturnTypeExpression().isPresent()) {
-      builder.returnType(
-          resolveTypeExpression(method.getReturnTypeExpression().get(), knownTypes));
-    }
-    return builder.build();
   }
 
   /**
@@ -584,6 +562,15 @@ public final class CodeGenerator {
   /**
    * Converts a WIT function to a bindgen function.
    *
+   * <p>Handles both interface-level functions (parsed by
+   * {@link ai.tegmentum.webassembly4j.bindgen.wit.WitInterfaceParser}, fully-
+   * typed) and resource-body methods (parsed by
+   * {@link ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser},
+   * with parameter and return types carried as raw expression placeholders).
+   * The {@link WitFunction#isConstructor()} / {@link WitFunction#isStatic()}
+   * flags flow directly onto the {@link BindgenFunction} without a separate
+   * translation path.
+   *
    * @param witFunction the WIT function
    * @param knownTypes previously converted types for resolving references
    * @return the bindgen function
@@ -594,6 +581,8 @@ public final class CodeGenerator {
         BindgenFunction.builder()
             .name(witFunction.getName())
             .async(witFunction.isAsync())
+            .constructor(witFunction.isConstructor())
+            .staticMethod(witFunction.isStatic())
             .documentation(witFunction.getDocumentation().orElse(null));
 
     // Convert parameters
@@ -630,7 +619,21 @@ public final class CodeGenerator {
   /**
    * Resolves a type from known types or converts it from WIT.
    *
-   * @param name the type name
+   * <p>Handles three shapes:
+   *
+   * <ol>
+   *   <li>{@code name} matches a previously converted type — emit a reference.
+   *   <li>{@code witType} is a raw type-expression placeholder produced by
+   *       {@link ai.tegmentum.webassembly4j.bindgen.wit.WitResourceBodyParser}
+   *       (a RESOURCE-kinded WitType whose name is the raw WIT source of the
+   *       type expression) — resolve via {@link #resolveTypeExpression} so
+   *       container forms like {@code list<u8>} / {@code borrow<X>} /
+   *       {@code result<T, E>} land correctly.
+   *   <li>Otherwise, fall through to the normal WIT-to-bindgen conversion.
+   * </ol>
+   *
+   * @param name the type name (or raw expression, for resource-method
+   *     placeholders)
    * @param witType the WIT type
    * @param knownTypes previously converted types
    * @return the bindgen type
@@ -640,6 +643,20 @@ public final class CodeGenerator {
     final BindgenType known = knownTypes.get(name);
     if (known != null) {
       return BindgenType.reference(name);
+    }
+    // Detect a WitResourceBodyParser-produced raw-expression placeholder:
+    // the parser wraps every parameter and return type in
+    // WitType.resource(rawExpr, rawExpr), so `witType` is RESOURCE-kinded
+    // with a name matching the untranslated WIT source. Route those through
+    // resolveTypeExpression so container forms (list<T>, option<T>,
+    // result<T, E>, borrow<X>, own<X>) resolve, and plain primitives
+    // (`u32`, `string`, ...) land as primitives instead of opaque
+    // resources. Existing WitInterfaceParser output for a genuine unknown-
+    // resource reference also lands here — resolveTypeExpression falls
+    // back to BindgenType.reference for anything it can't classify, which
+    // matches the pre-refactor behaviour for those cases.
+    if (witType != null && witType.getKind().getCategory() == WitTypeCategory.RESOURCE) {
+      return resolveTypeExpression(name, knownTypes);
     }
     return convertWitType(name, witType);
   }
