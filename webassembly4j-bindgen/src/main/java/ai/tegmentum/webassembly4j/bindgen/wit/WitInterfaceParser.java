@@ -35,6 +35,30 @@ import java.util.regex.Pattern;
  * <p>This class provides comprehensive parsing capabilities for WIT interface definitions,
  * including type definitions, function signatures, and interface metadata.
  *
+ * <p>TODO(bindgen 3.0): This regex-based parser is intentionally single-interface —
+ * a full WIT world source (multiple {@code interface} blocks, {@code world} blocks,
+ * {@code package} declarations, {@code use} clauses, {@code import} / {@code export}
+ * clauses, and {@code resource} bodies) is fanned out into single-interface
+ * fragments by {@link WitWorldPreprocessor} before reaching this class, and
+ * resource-body syntax (constructor / static / instance shape) is peeled off by
+ * {@link WitResourceBodyParser}. A proper native parser would collapse those two
+ * wrappers into a single recursive-descent walk over a tokenizer stream, which
+ * both simplifies the codepath and removes the "regex can't cleanly express X"
+ * exemptions that pushed the wrappers into existence. Constructs the wrappers
+ * currently cover (and this class does not on its own):
+ *
+ * <ul>
+ *   <li>{@code package name@version;}
+ *   <li>{@code world X { ... }} with type-hoisted world semantics (ADR-006)
+ *   <li>Multiple {@code interface X { ... }} blocks in one file
+ *   <li>{@code import} / {@code export} / {@code use} clauses inside a world
+ *   <li>{@code resource X { constructor(...); name: static func(...); name: func(...); }}
+ * </ul>
+ *
+ * When the rewrite lands, {@link WitWorldPreprocessor} and
+ * {@link WitResourceBodyParser} can retire in favor of a single parser entry
+ * point that returns a {@link WitInterfaceDefinition} list directly.
+ *
  * @since 1.0.0
  */
 public final class WitInterfaceParser {
