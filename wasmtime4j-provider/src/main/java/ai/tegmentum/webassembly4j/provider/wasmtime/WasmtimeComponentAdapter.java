@@ -350,6 +350,34 @@ final class WasmtimeComponentAdapter implements ai.tegmentum.webassembly4j.api.C
         return WasiNnProbeHolder.AVAILABLE;
     }
 
+    /**
+     * ADR-011 native-CM pass-through hook. Returns the underlying wasmtime4j
+     * {@link ai.tegmentum.wasmtime4j.component.Component} when requested, so
+     * pass-through embedders (e.g. wasi-rs {@code WasmtimeCmEmbedderRuntime})
+     * can call {@code componentType()} and walk per-interface function names to
+     * bind {@code linker.defineFunction} thunks by declaration order — the
+     * introspection path is not exposed on the framework-neutral
+     * {@link ai.tegmentum.webassembly4j.api.Component} interface today.
+     *
+     * <p>Also returns {@link ai.tegmentum.wasmtime4j.Engine} when asked, so
+     * callers can co-locate the wasmtime4j {@link ai.tegmentum.wasmtime4j.Store}
+     * and {@link ai.tegmentum.wasmtime4j.component.ComponentLinker} against
+     * the same engine instance the component was compiled on.
+     */
+    @Override
+    public <T> java.util.Optional<T> extension(Class<T> extensionType) {
+        if (extensionType == ai.tegmentum.wasmtime4j.component.Component.class) {
+            return java.util.Optional.of(extensionType.cast(nativeComponent));
+        }
+        if (extensionType == ai.tegmentum.wasmtime4j.Engine.class) {
+            return java.util.Optional.of(extensionType.cast(engine));
+        }
+        if (extensionType == ai.tegmentum.wasmtime4j.component.ComponentEngine.class) {
+            return java.util.Optional.of(extensionType.cast(componentEngine));
+        }
+        return java.util.Optional.empty();
+    }
+
     /** Reflection-lookup holder — computed once, then a constant boolean read. */
     private static final class WasiNnProbeHolder {
         private static final boolean AVAILABLE = probeNative();
