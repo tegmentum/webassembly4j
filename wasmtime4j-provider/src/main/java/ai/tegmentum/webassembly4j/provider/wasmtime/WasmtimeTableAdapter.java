@@ -30,12 +30,31 @@ final class WasmtimeTableAdapter implements Table {
 
     @Override
     public Object get(int index) {
+        checkIndex(index);
         return nativeTable.get(index);
     }
 
     @Override
     public void set(int index, Object value) {
+        checkIndex(index);
         nativeTable.set(index, value);
+    }
+
+    /**
+     * The native wasmtime4j JniTable surfaces out-of-bounds access as a
+     * generic {@link RuntimeException} wrapping a {@code WasmRuntimeException}
+     * (see {@code JniTable#get}/{@code JniTable#set}), and it turns negative
+     * indices into {@link IllegalArgumentException} via
+     * {@code Validation.requireNonNegative}. The api-layer Table contract
+     * uniformly promises {@link IndexOutOfBoundsException}, so we bounds-check
+     * ourselves before delegation to give consumers a portable exception type.
+     */
+    private void checkIndex(int index) {
+        int currentSize = nativeTable.getSize();
+        if (index < 0 || index >= currentSize) {
+            throw new IndexOutOfBoundsException(
+                "Table index " + index + " out of bounds for size " + currentSize);
+        }
     }
 
     @Override
