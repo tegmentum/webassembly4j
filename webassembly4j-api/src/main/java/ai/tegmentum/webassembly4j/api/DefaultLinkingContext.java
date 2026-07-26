@@ -13,16 +13,19 @@ public final class DefaultLinkingContext implements LinkingContext {
     private final Map<String, Object> imports;
     private final List<HostFunctionDefinition> hostFunctions;
     private final List<WitHostFunctionDefinition> witHostFunctions;
+    private final List<ExternImportDefinition> externImports;
 
     private DefaultLinkingContext(WasiContext wasiContext, WasiNnConfig wasiNnConfig,
                                   Map<String, Object> imports,
                                   List<HostFunctionDefinition> hostFunctions,
-                                  List<WitHostFunctionDefinition> witHostFunctions) {
+                                  List<WitHostFunctionDefinition> witHostFunctions,
+                                  List<ExternImportDefinition> externImports) {
         this.wasiContext = wasiContext;
         this.wasiNnConfig = wasiNnConfig;
         this.imports = Collections.unmodifiableMap(new LinkedHashMap<>(imports));
         this.hostFunctions = Collections.unmodifiableList(new ArrayList<>(hostFunctions));
         this.witHostFunctions = Collections.unmodifiableList(new ArrayList<>(witHostFunctions));
+        this.externImports = Collections.unmodifiableList(new ArrayList<>(externImports));
     }
 
     @Override
@@ -45,6 +48,11 @@ public final class DefaultLinkingContext implements LinkingContext {
         return witHostFunctions;
     }
 
+    @Override
+    public List<ExternImportDefinition> externImports() {
+        return externImports;
+    }
+
     public Map<String, Object> imports() {
         return imports;
     }
@@ -60,6 +68,7 @@ public final class DefaultLinkingContext implements LinkingContext {
         private final Map<String, Object> imports = new LinkedHashMap<>();
         private final List<HostFunctionDefinition> hostFunctions = new ArrayList<>();
         private final List<WitHostFunctionDefinition> witHostFunctions = new ArrayList<>();
+        private final List<ExternImportDefinition> externImports = new ArrayList<>();
 
         private Builder() {
         }
@@ -84,6 +93,23 @@ public final class DefaultLinkingContext implements LinkingContext {
             return this;
         }
 
+        /**
+         * Puts a value into an untyped import map.
+         *
+         * @deprecated The stored map is not exposed through the
+         *     {@link LinkingContext} interface, so no in-tree provider consumes
+         *     it — calls have no observable effect on instantiation. Use the
+         *     typed methods
+         *     {@link #addMemoryImport(String, String, Memory)},
+         *     {@link #addTableImport(String, String, Table)},
+         *     {@link #addGlobalImport(String, String, Global)},
+         *     {@link #addFunctionImport(String, String, Function)}, or
+         *     {@link #addExternImport(ExternImportDefinition)} instead. The
+         *     method is retained for source-compatibility with existing
+         *     callers; its behaviour (a no-op with respect to instantiation)
+         *     is unchanged.
+         */
+        @Deprecated
         public Builder addImport(String name, Object value) {
             this.imports.put(name, value);
             return this;
@@ -117,9 +143,75 @@ public final class DefaultLinkingContext implements LinkingContext {
             return this;
         }
 
+        /**
+         * Wire an already-constructed {@link ExternImportDefinition}. Useful
+         * when a caller has built the variant elsewhere or is threading a
+         * heterogeneous list through their code.
+         *
+         * @since 2.5.2
+         */
+        public Builder addExternImport(ExternImportDefinition definition) {
+            this.externImports.add(definition);
+            return this;
+        }
+
+        /**
+         * Wire an imported linear memory under {@code moduleName::name}. The
+         * importing module must declare
+         * {@code (import "<moduleName>" "<name>" (memory ...))}.
+         *
+         * @since 2.5.2
+         */
+        public Builder addMemoryImport(String moduleName, String name, Memory memory) {
+            this.externImports.add(new MemoryImport(moduleName, name, memory));
+            return this;
+        }
+
+        /**
+         * Wire an imported table under {@code moduleName::name}. The importing
+         * module must declare
+         * {@code (import "<moduleName>" "<name>" (table ...))}.
+         *
+         * @since 2.5.2
+         */
+        public Builder addTableImport(String moduleName, String name, Table table) {
+            this.externImports.add(new TableImport(moduleName, name, table));
+            return this;
+        }
+
+        /**
+         * Wire an imported global under {@code moduleName::name}. The importing
+         * module must declare
+         * {@code (import "<moduleName>" "<name>" (global ...))}.
+         *
+         * @since 2.5.2
+         */
+        public Builder addGlobalImport(String moduleName, String name, Global global) {
+            this.externImports.add(new GlobalImport(moduleName, name, global));
+            return this;
+        }
+
+        /**
+         * Wire an imported function under {@code moduleName::name}. The
+         * importing module must declare
+         * {@code (import "<moduleName>" "<name>" (func ...))}.
+         *
+         * <p>Note: the wasmtime4j-provider does not yet implement this variant
+         * — see {@link FunctionImport}. For today's function-import needs use
+         * {@link #addHostFunction(String, String, ValueType[], ValueType[], HostFunction)}
+         * instead.
+         *
+         * @since 2.5.2
+         */
+        public Builder addFunctionImport(String moduleName, String name, Function function) {
+            this.externImports.add(new FunctionImport(moduleName, name, function));
+            return this;
+        }
+
         public DefaultLinkingContext build() {
             return new DefaultLinkingContext(
-                    wasiContext, wasiNnConfig, imports, hostFunctions, witHostFunctions);
+                    wasiContext, wasiNnConfig, imports, hostFunctions, witHostFunctions,
+                    externImports);
         }
     }
 }
