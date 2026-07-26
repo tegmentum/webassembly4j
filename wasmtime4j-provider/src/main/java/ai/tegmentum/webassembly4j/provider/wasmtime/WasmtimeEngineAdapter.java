@@ -184,6 +184,34 @@ final class WasmtimeEngineAdapter implements Engine {
         }
     }
 
+    /**
+     * Cross-module store sharing per F-Webassembly4j-Cross-Module-Store-Sharing
+     * charter 2026-07-26 (Option A). Reuses {@code shareStoreWith}'s native
+     * {@link ai.tegmentum.wasmtime4j.Store} for the new module so any
+     * memory/table/global imports referring to exports of the shared instance
+     * satisfy wasmtime's store-invariant check.
+     */
+    @Override
+    public Module loadModule(byte[] bytes,
+                             ai.tegmentum.webassembly4j.api.Instance shareStoreWith) {
+        if (shareStoreWith == null) {
+            throw new IllegalArgumentException("shareStoreWith must not be null");
+        }
+        ai.tegmentum.wasmtime4j.Instance nativeInst = shareStoreWith
+                .unwrap(ai.tegmentum.wasmtime4j.Instance.class)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "shareStoreWith is not backed by a wasmtime4j Instance"));
+        ai.tegmentum.wasmtime4j.Store sharedStore = nativeInst.getStore();
+        try {
+            ai.tegmentum.wasmtime4j.Module nativeModule = engine.compileModule(bytes);
+            return new WasmtimeModuleAdapter(runtime, engine, nativeModule, sharedStore,
+                    nativeConfig);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ai.tegmentum.webassembly4j.api.exception.WebAssemblyException(
+                    "Failed to load WebAssembly module (with shared store)", e);
+        }
+    }
+
     @Override
     public Component loadComponent(byte[] bytes) {
         try {
