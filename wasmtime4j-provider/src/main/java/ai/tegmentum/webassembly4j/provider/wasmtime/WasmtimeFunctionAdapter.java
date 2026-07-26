@@ -10,6 +10,7 @@ import ai.tegmentum.webassembly4j.api.exception.ExecutionException;
 import ai.tegmentum.webassembly4j.api.exception.TrapException;
 
 import java.util.List;
+import java.util.Optional;
 
 final class WasmtimeFunctionAdapter implements Function {
 
@@ -20,6 +21,15 @@ final class WasmtimeFunctionAdapter implements Function {
 
     WasmtimeFunctionAdapter(WasmFunction nativeFunction) {
         this.nativeFunction = nativeFunction;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> Optional<T> unwrap(Class<T> nativeType) {
+        if (nativeType.isInstance(nativeFunction)) {
+            return Optional.of((T) nativeFunction);
+        }
+        return Optional.empty();
     }
 
     private FastPath resolveFastPath() {
