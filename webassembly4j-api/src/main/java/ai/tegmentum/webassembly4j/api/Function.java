@@ -1,5 +1,7 @@
 package ai.tegmentum.webassembly4j.api;
 
+import java.util.Optional;
+
 public interface Function {
 
     ValueType[] parameterTypes();
@@ -62,5 +64,24 @@ public interface Function {
             results[i] = invoke(argSets[i]);
         }
         return results;
+    }
+
+    /**
+     * Provider escape hatch — returns the underlying native function object if
+     * this instance is backed by one assignable to {@code nativeType}. Analogous
+     * to {@link Table#unwrap}, {@link Memory#unwrap}, and other api-layer types.
+     *
+     * <p>Consumers should PREFER the engine-agnostic methods on this interface
+     * (invoke, typed, invokeMultiple, parameterTypes/resultTypes). Use unwrap
+     * only when a spec-standard capability is unavailable at the api layer —
+     * for example, extracting a funcref to install into a Table for dynamic
+     * dispatch scenarios.
+     *
+     * @param nativeType the native type to unwrap to
+     * @param <T> the native type
+     * @return the underlying native function if assignable, otherwise empty
+     */
+    default <T> Optional<T> unwrap(Class<T> nativeType) {
+        return Optional.empty();
     }
 }
