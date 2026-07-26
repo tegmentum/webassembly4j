@@ -45,4 +45,23 @@ public interface LinkingContext {
     default boolean supportsWasiNn() {
         return false;
     }
+
+    /**
+     * Typed extern-import definitions to wire during
+     * {@link Module#instantiate(LinkingContext)}. Providers consume these to
+     * satisfy imports of memories, tables, globals, and functions from
+     * external instances (WASI shim wiring, cross-instance shared memory,
+     * function-table plug-in registration, etc.).
+     *
+     * <p>Providers that do not support a given variant should throw at
+     * {@code instantiate} time. Providers that do not support any variant
+     * behave as if this list were empty.
+     *
+     * @return an unmodifiable list of extern-import definitions; empty by
+     *         default so existing implementations remain valid.
+     * @since 2.5.2
+     */
+    default List<ExternImportDefinition> externImports() {
+        return Collections.emptyList();
+    }
 }
