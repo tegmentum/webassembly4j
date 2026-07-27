@@ -11,9 +11,27 @@ final class WasmtimeMemoryAdapter implements Memory {
     private static final int PAGE_SIZE = 65536;
 
     private final WasmMemory nativeMemory;
+    /**
+     * Non-null when this adapter was minted by {@code WasmtimeCallerAdapter.getMemory(name)}
+     * from within a callback frame. Signals that the underlying native handle is a raw
+     * {@code Box<wasmtime::Memory>} (not registry-wrapped), so
+     * {@code WasmtimeCallerAdapter.defineCallerScopedExternImports} must route through the
+     * caller-scoped {@code linkerDefineMemoryFromExport} path instead of the handle-based
+     * path — the registry lookup would otherwise fail.
+     */
+    private final String callerExportName;
 
     WasmtimeMemoryAdapter(WasmMemory nativeMemory) {
+        this(nativeMemory, null);
+    }
+
+    WasmtimeMemoryAdapter(WasmMemory nativeMemory, String callerExportName) {
         this.nativeMemory = nativeMemory;
+        this.callerExportName = callerExportName;
+    }
+
+    String callerExportName() {
+        return callerExportName;
     }
 
     @Override

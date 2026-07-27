@@ -9,9 +9,22 @@ import java.util.OptionalInt;
 final class WasmtimeTableAdapter implements Table {
 
     private final WasmTable nativeTable;
+    /**
+     * See {@code WasmtimeMemoryAdapter.callerExportName} — same rationale.
+     */
+    private final String callerExportName;
 
     WasmtimeTableAdapter(WasmTable nativeTable) {
+        this(nativeTable, null);
+    }
+
+    WasmtimeTableAdapter(WasmTable nativeTable, String callerExportName) {
         this.nativeTable = nativeTable;
+        this.callerExportName = callerExportName;
+    }
+
+    String callerExportName() {
+        return callerExportName;
     }
 
     @Override
