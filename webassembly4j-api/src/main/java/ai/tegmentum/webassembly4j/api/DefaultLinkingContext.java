@@ -14,18 +14,22 @@ public final class DefaultLinkingContext implements LinkingContext {
     private final List<HostFunctionDefinition> hostFunctions;
     private final List<WitHostFunctionDefinition> witHostFunctions;
     private final List<ExternImportDefinition> externImports;
+    private final List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions;
 
     private DefaultLinkingContext(WasiContext wasiContext, WasiNnConfig wasiNnConfig,
                                   Map<String, Object> imports,
                                   List<HostFunctionDefinition> hostFunctions,
                                   List<WitHostFunctionDefinition> witHostFunctions,
-                                  List<ExternImportDefinition> externImports) {
+                                  List<ExternImportDefinition> externImports,
+                                  List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions) {
         this.wasiContext = wasiContext;
         this.wasiNnConfig = wasiNnConfig;
         this.imports = Collections.unmodifiableMap(new LinkedHashMap<>(imports));
         this.hostFunctions = Collections.unmodifiableList(new ArrayList<>(hostFunctions));
         this.witHostFunctions = Collections.unmodifiableList(new ArrayList<>(witHostFunctions));
         this.externImports = Collections.unmodifiableList(new ArrayList<>(externImports));
+        this.callerAwareHostFunctions = Collections.unmodifiableList(
+                new ArrayList<>(callerAwareHostFunctions));
     }
 
     @Override
@@ -53,6 +57,11 @@ public final class DefaultLinkingContext implements LinkingContext {
         return externImports;
     }
 
+    @Override
+    public List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions() {
+        return callerAwareHostFunctions;
+    }
+
     public Map<String, Object> imports() {
         return imports;
     }
@@ -69,6 +78,8 @@ public final class DefaultLinkingContext implements LinkingContext {
         private final List<HostFunctionDefinition> hostFunctions = new ArrayList<>();
         private final List<WitHostFunctionDefinition> witHostFunctions = new ArrayList<>();
         private final List<ExternImportDefinition> externImports = new ArrayList<>();
+        private final List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions =
+                new ArrayList<>();
 
         private Builder() {
         }
@@ -208,10 +219,40 @@ public final class DefaultLinkingContext implements LinkingContext {
             return this;
         }
 
+        /**
+         * Register a caller-aware host function under {@code moduleName::functionName}.
+         * The provider passes a {@link Caller} handle scoped to the callback
+         * frame — see {@link CallerAwareHostFunction}.
+         *
+         * <p>Providers that do not support the caller-aware pattern raise
+         * {@link ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException}
+         * at {@code instantiate} time when the resulting list is non-empty.
+         *
+         * @since 2.5.2
+         */
+        public Builder addCallerAwareHostFunction(String moduleName, String functionName,
+                                                   ValueType[] parameterTypes,
+                                                   ValueType[] resultTypes,
+                                                   CallerAwareHostFunction<?> function) {
+            this.callerAwareHostFunctions.add(new CallerAwareHostFunctionDefinition(
+                    moduleName, functionName, parameterTypes, resultTypes, function));
+            return this;
+        }
+
+        /**
+         * Register a pre-built {@link CallerAwareHostFunctionDefinition}.
+         *
+         * @since 2.5.2
+         */
+        public Builder addCallerAwareHostFunction(CallerAwareHostFunctionDefinition definition) {
+            this.callerAwareHostFunctions.add(definition);
+            return this;
+        }
+
         public DefaultLinkingContext build() {
             return new DefaultLinkingContext(
                     wasiContext, wasiNnConfig, imports, hostFunctions, witHostFunctions,
-                    externImports);
+                    externImports, callerAwareHostFunctions);
         }
     }
 }
