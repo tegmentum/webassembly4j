@@ -64,4 +64,26 @@ public interface LinkingContext {
     default List<ExternImportDefinition> externImports() {
         return Collections.emptyList();
     }
+
+    /**
+     * Caller-aware host functions to link into a module's imports. Each
+     * definition wraps a {@link CallerAwareHostFunction} whose implementation
+     * receives a {@link Caller} handle for scoped access to the calling
+     * instance's exports, engine, and store — safe from within a host
+     * callback frame (see
+     * {@code doctrine/specs/f-webassembly4j-caller-aware-host-function-charter-2026-07-26.md}).
+     *
+     * <p>Providers that do not support caller-aware host functions throw
+     * {@link ai.tegmentum.webassembly4j.api.exception.UnsupportedFeatureException}
+     * at {@code instantiate} time when this list is non-empty; providers
+     * that support it consume the list alongside {@link #hostFunctions()},
+     * {@link #wasiContext()}, and {@link #externImports()}.
+     *
+     * @return an unmodifiable list of caller-aware host function definitions;
+     *         empty by default so existing implementations remain valid.
+     * @since 2.5.2
+     */
+    default List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions() {
+        return Collections.emptyList();
+    }
 }
