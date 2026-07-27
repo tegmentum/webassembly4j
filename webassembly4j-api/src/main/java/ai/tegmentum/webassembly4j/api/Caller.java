@@ -109,6 +109,45 @@ public interface Caller<T> {
     long growMemory(Memory memory, long deltaPages);
 
     /**
+     * Read a byte range from a caller-exported memory using the caller-scoped
+     * native path (safe from within a host-callback frame).
+     *
+     * <p>Preferable to {@code getMemory(name).get().read(...)} from inside a
+     * callback because the api-layer {@link Memory} adapter's native handle
+     * may not be registered from the callback frame, causing native failures.
+     * This method routes through the provider's scoped-caller memory-read
+     * primitive (wasmtime4j-provider: uses {@code caller.get_export(name)
+     * .into_memory() + Memory::read(&mut ctx, ...)}).
+     *
+     * @param memoryName name of the caller's exported memory (e.g. "memory")
+     * @param offset byte offset into memory
+     * @param length number of bytes to read
+     * @return the byte range
+     * @throws IllegalStateException if the callback has returned
+     * @throws UnsupportedOperationException if the backend has not implemented
+     *         scoped memory I/O
+     * @since 2.5.2
+     */
+    default byte[] readMemory(String memoryName, long offset, int length) {
+        throw new UnsupportedOperationException(
+                "readMemory not implemented on this Caller backend");
+    }
+
+    /**
+     * Write a byte array into a caller-exported memory using the caller-scoped
+     * native path. Same safety guarantees as {@link #readMemory}.
+     *
+     * @throws IllegalStateException if the callback has returned
+     * @throws UnsupportedOperationException if the backend has not implemented
+     *         scoped memory I/O
+     * @since 2.5.2
+     */
+    default void writeMemory(String memoryName, long offset, byte[] bytes) {
+        throw new UnsupportedOperationException(
+                "writeMemory not implemented on this Caller backend");
+    }
+
+    /**
      * Provider escape hatch — returns the underlying provider-specific
      * caller handle when {@code nativeType} is assignable from it.
      */
