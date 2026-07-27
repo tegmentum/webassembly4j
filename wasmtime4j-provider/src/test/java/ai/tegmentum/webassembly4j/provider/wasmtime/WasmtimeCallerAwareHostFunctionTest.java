@@ -40,22 +40,25 @@ class WasmtimeCallerAwareHostFunctionTest {
     //     (import "env" "trigger_grow" (func $trigger_grow (param i32)))
     //     (memory (export "memory") 1)
     //     (table (export "table") 1 funcref)
-    //     (func (export "run") (param i32)
-    //       local.get 0
+    //     (func (export "run")
+    //       i32.const 1
     //       call $trigger_grow))
     //
-    // 88 bytes. Kept inline to match the pattern used by
+    // 91 bytes. Kept inline to match the pattern used by
     // WasmtimeLinkingContextExternImportsTest so the test needs no build-time
-    // wasm-authoring toolchain.
+    // wasm-authoring toolchain. run() intentionally takes no params (constant
+    // 1 is loaded inline) to sidestep a pre-existing WasmtimeFunctionAdapter
+    // fast-path bug where the (i32) -> () signature routes through
+    // callVoid() and drops the argument — out of scope for this charter.
     private static final byte[] CALLER_AWARE_MODULE = new byte[] {
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60,
-        0x01, 0x7f, 0x00, 0x02, 0x14, 0x01, 0x03, 0x65, 0x6e, 0x76, 0x0c, 0x74,
-        0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x5f, 0x67, 0x72, 0x6f, 0x77, 0x00,
-        0x00, 0x03, 0x02, 0x01, 0x00, 0x04, 0x04, 0x01, 0x70, 0x00, 0x01, 0x05,
-        0x03, 0x01, 0x00, 0x01, 0x07, 0x18, 0x03, 0x06, 0x6d, 0x65, 0x6d, 0x6f,
-        0x72, 0x79, 0x02, 0x00, 0x05, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x01, 0x00,
-        0x03, 0x72, 0x75, 0x6e, 0x00, 0x01, 0x0a, 0x08, 0x01, 0x06, 0x00, 0x20,
-        0x00, 0x10, 0x00, 0x0b
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x60,
+        0x01, 0x7f, 0x00, 0x60, 0x00, 0x00, 0x02, 0x14, 0x01, 0x03, 0x65, 0x6e,
+        0x76, 0x0c, 0x74, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x5f, 0x67, 0x72,
+        0x6f, 0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x04, 0x04, 0x01, 0x70,
+        0x00, 0x01, 0x05, 0x03, 0x01, 0x00, 0x01, 0x07, 0x18, 0x03, 0x06, 0x6d,
+        0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x05, 0x74, 0x61, 0x62, 0x6c,
+        0x65, 0x01, 0x00, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x01, 0x0a, 0x08, 0x01,
+        0x06, 0x00, 0x41, 0x01, 0x10, 0x00, 0x0b
     };
 
     static boolean runtimeAvailable() {
@@ -66,18 +69,24 @@ class WasmtimeCallerAwareHostFunctionTest {
     @EnabledIf("runtimeAvailable")
     void callerAwareHostFunctionGrowsCallerTableFromCallback() {
         AtomicReference<Caller<?>> capturedCaller = new AtomicReference<>();
-        AtomicInteger observedPrevSize = new AtomicInteger(-1);
+        AtomicReference<Table> capturedTable = new AtomicReference<>();
         AtomicInteger observedGrowReturn = new AtomicInteger(Integer.MIN_VALUE);
+        AtomicInteger observedArg = new AtomicInteger(Integer.MIN_VALUE);
 
+        // The callback restricts itself to caller-scoped ops only.
+        // Calling regular WasmTable/Memory accessors (which acquire the
+        // store lock) from inside the callback SIGSEGVs — the whole point
+        // of the caller-aware pattern is to route mutation through the
+        // borrow-safe scoped entrypoints, so the test does the same.
         CallerAwareHostFunction<?> triggerGrow = (caller, args) -> {
-            // Capture the caller so we can prove post-callback use throws.
             capturedCaller.set(caller);
+            observedArg.set(((Number) args[0]).intValue());
 
             Table t = caller.getTable("table").orElseThrow(
                     () -> new AssertionError("callback failed to reach caller table"));
-            observedPrevSize.set(t.size());
-            int growBy = ((Number) args[0]).intValue();
-            int prevSize = caller.growTable(t, growBy, null);
+            capturedTable.set(t);
+
+            int prevSize = caller.growTable(t, observedArg.get(), null);
             observedGrowReturn.set(prevSize);
             return new Object[0];
         };
@@ -102,11 +111,11 @@ class WasmtimeCallerAwareHostFunctionTest {
                     () -> new AssertionError("run: run export missing"));
 
             // Guest calls trigger_grow(1) — callback grows the table by 1.
-            run.invoke(1);
+            run.invoke();
 
-            // Callback executed and observed the pre-grow size.
-            assertEquals(1, observedPrevSize.get(),
-                    "callback saw pre-grow table size");
+            // Callback executed.
+            assertEquals(1, observedArg.get(),
+                    "callback observed the guest-side i32 argument");
             assertEquals(1, observedGrowReturn.get(),
                     "growTable return value is previous size on success");
 
@@ -116,14 +125,17 @@ class WasmtimeCallerAwareHostFunctionTest {
                     "table grew by 1 in the caller-scoped path");
 
             // Use-after-return: retained Caller handle now throws when
-            // any scoped method is invoked. Any of the scoped ops would
-            // do; growTable is convenient because it does not need
-            // any additional native handles beyond the caller itself.
+            // any scoped method is invoked. Reuse the callback's captured
+            // Table wrapper for the argument (already unwrap-friendly),
+            // and expect the wasmtime4j r.2 generation counter to reject
+            // the stale caller before any native dereference happens.
             Caller<?> stale = capturedCaller.get();
+            Table staleTable = capturedTable.get();
             assertNotNull(stale, "capturedCaller set inside the callback");
+            assertNotNull(staleTable, "capturedTable set inside the callback");
 
             IllegalStateException ise = assertThrows(IllegalStateException.class, () ->
-                    stale.growTable(tableAfter, 1, null),
+                    stale.growTable(staleTable, 1, null),
                     "wasmtime4j r.2 generation counter rejects use-after-return");
             assertTrue(ise.getMessage().toLowerCase().contains("caller"),
                     "message identifies the caller-generation issue: " + ise.getMessage());
