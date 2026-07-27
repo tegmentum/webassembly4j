@@ -22,6 +22,31 @@ import java.util.Optional;
  * scoped methods raise {@link UnsupportedOperationException} on the
  * unsupported entrypoints.
  *
+ * <h2>Design alignment: wasmos {@code host:wasmtime@0.10.0} WIT</h2>
+ *
+ * <p>webassembly4j is a portable, provider-agnostic engine abstraction —
+ * the same purpose wasmos's {@code host:wasmtime@0.10.0} WIT interface
+ * serves for the WIT / component-model ecosystem. This {@code Caller}
+ * interface's method shape mirrors the equivalent
+ * {@code host:wasmtime@0.10.0} WIT primitives (see
+ * {@code ~/git/wasmos/wit/}: {@code engine.wit}, {@code store.wit},
+ * {@code module-compile.wit}, {@code linker.wit}, {@code instance.wit},
+ * {@code refs.wit}). The two projects independently converged on the
+ * same primitive set — validation that the surface is broadly useful
+ * for any host that wants to drive dynamic composition from a callback
+ * frame, not JIT-loader-bespoke.
+ *
+ * <p>Per {@code doctrine-wasmtime4j-caller-scoped-api-aligned-with-wasmos-wit-2026-07-27}
+ * (which applies at the webassembly4j layer, not wasmtime4j — the JNI
+ * layer stays wasmtime-specific): future caller-scoped additions to this
+ * interface MUST mirror the equivalent method in wasmos WIT (kebab-case
+ * → camelCase, {@code borrow<store>} removed since the caller carries
+ * its own implicit store binding, {@code result<T, error>} → {@code T}
+ * return + throws, {@code option<T>} → {@code Optional<T>},
+ * {@code list<u8>} → {@code byte[]}). Deviations must be documented in
+ * the method's Javadoc. Discoverable via {@code grep "@see wasmos"} across
+ * this file.
+ *
  * @param <T> the type of caller-associated data (provider-specific store
  *            data slot; typically {@code Void} when no data is used)
  * @since 2.5.2
@@ -36,21 +61,34 @@ public interface Caller<T> {
 
     /**
      * Returns an exported memory of the calling instance by name.
+     *
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.instance.get-memory}
+     *     ({@code func(store: borrow&lt;store&gt;, name: string) -&gt; option&lt;wasm-memory&gt;}).
      */
     Optional<Memory> getMemory(String name);
 
     /**
      * Returns an exported table of the calling instance by name.
+     *
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.instance.get-table}.
      */
     Optional<Table> getTable(String name);
 
     /**
      * Returns an exported function of the calling instance by name.
+     *
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.instance.get-func}.
      */
     Optional<Function> getFunction(String name);
 
     /**
      * Returns an exported global of the calling instance by name.
+     *
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.instance.get-global}.
      */
     Optional<Global> getGlobal(String name);
 
@@ -64,6 +102,11 @@ public interface Caller<T> {
      *                  that accept it)
      * @return the compiled module
      * @throws IllegalStateException if the callback has returned
+     * @see <a href="file://~/git/wasmos/wit/module-compile.wit">wasmos wit://module-compile.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/module-compile.from-binary}
+     *     ({@code func(engine: borrow&lt;engine&gt;, bytes: list&lt;u8&gt;) -&gt; result&lt;module, error&gt;});
+     *     Java-side takes only bytes since the engine is implicit in the caller
+     *     binding.
      */
     Module compileModule(byte[] wasmBytes);
 
@@ -79,6 +122,12 @@ public interface Caller<T> {
      *                no-import instantiation
      * @return the newly created instance
      * @throws IllegalStateException if the callback has returned
+     * @see <a href="file://~/git/wasmos/wit/linker.wit">wasmos wit://linker.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/linker.linker.instantiate}
+     *     ({@code func(store: borrow&lt;store&gt;, module: borrow&lt;module&gt;)
+     *     -&gt; result&lt;instance, error&gt;}); Java-side collapses linker construction
+     *     and {@code define-memory/table/global/func} calls into a single
+     *     {@link LinkingContext} argument.
      */
     Instance instantiate(Module module, LinkingContext imports);
 
@@ -90,6 +139,13 @@ public interface Caller<T> {
      *
      * @return the previous size on success, {@code -1} on failure
      * @throws IllegalStateException if the callback has returned
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.wasm-table.grow}
+     *     ({@code func(store: borrow&lt;store&gt;, delta: u64, init: val) -&gt; result&lt;u64, error&gt;});
+     *     added upstream via F-Wasmos-Guest-JIT-Loader r.2 (2026-07-27).
+     *     Java-side returns {@code int} + {@code -1}-on-failure sentinel
+     *     rather than {@code result} since {@code int} matches the WIT
+     *     table's practical index range and the pre-existing method signature.
      */
     int growTable(Table table, int delta, Object init);
 
@@ -97,6 +153,10 @@ public interface Caller<T> {
      * Write a value into a caller-visible table slot.
      *
      * @throws IllegalStateException if the callback has returned
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.wasm-table.set}
+     *     ({@code func(store: borrow&lt;store&gt;, index: u64, value: val) -&gt; result&lt;_, error&gt;});
+     *     added upstream via F-Wasmos-Guest-JIT-Loader r.2 (2026-07-27).
      */
     void setTableElement(Table table, int index, Object value);
 
@@ -105,6 +165,9 @@ public interface Caller<T> {
      *
      * @return the previous size in pages on success, {@code -1} on failure
      * @throws IllegalStateException if the callback has returned
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.wasm-memory.grow}
+     *     ({@code func(store: borrow&lt;store&gt;, delta: u64) -&gt; result&lt;u64, error&gt;}).
      */
     long growMemory(Memory memory, long deltaPages);
 
@@ -126,6 +189,12 @@ public interface Caller<T> {
      * @throws IllegalStateException if the callback has returned
      * @throws UnsupportedOperationException if the backend has not implemented
      *         scoped memory I/O
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.wasm-memory.read}
+     *     ({@code func(store: borrow&lt;store&gt;, offset: u64, length: u64)
+     *     -&gt; result&lt;list&lt;u8&gt;, error&gt;}); Java-side takes {@code memoryName}
+     *     lookup rather than {@code borrow&lt;wasm-memory&gt;} since the caller
+     *     resolves the export by name internally.
      * @since 2.5.2
      */
     default byte[] readMemory(String memoryName, long offset, int length) {
@@ -140,6 +209,10 @@ public interface Caller<T> {
      * @throws IllegalStateException if the callback has returned
      * @throws UnsupportedOperationException if the backend has not implemented
      *         scoped memory I/O
+     * @see <a href="file://~/git/wasmos/wit/instance.wit">wasmos wit://instance.wit</a>
+     *     — mirror of {@code host:wasmtime@0.10.0/instance.wasm-memory.write}
+     *     ({@code func(store: borrow&lt;store&gt;, offset: u64, data: list&lt;u8&gt;)
+     *     -&gt; result&lt;_, error&gt;}).
      * @since 2.5.2
      */
     default void writeMemory(String memoryName, long offset, byte[] bytes) {
