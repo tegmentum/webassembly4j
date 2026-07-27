@@ -338,6 +338,26 @@ final class WasmtimeCallerAdapter<T> implements Caller<T> {
     }
 
     @Override
+    public byte[] readMemory(String memoryName, long offset, int length) {
+        try {
+            return nativeCaller.readMemory(memoryName, offset, length);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ExecutionException(
+                    "Caller-scoped readMemory failed: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void writeMemory(String memoryName, long offset, byte[] bytes) {
+        try {
+            nativeCaller.writeMemory(memoryName, offset, bytes);
+        } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
+            throw new ExecutionException(
+                    "Caller-scoped writeMemory failed: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <U> Optional<U> unwrap(Class<U> nativeType) {
         if (nativeType.isInstance(nativeCaller)) {
