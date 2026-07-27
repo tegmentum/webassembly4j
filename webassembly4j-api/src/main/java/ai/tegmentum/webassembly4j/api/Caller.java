@@ -36,21 +36,25 @@ public interface Caller<T> {
 
     /**
      * Returns an exported memory of the calling instance by name.
+     *
      */
     Optional<Memory> getMemory(String name);
 
     /**
      * Returns an exported table of the calling instance by name.
+     *
      */
     Optional<Table> getTable(String name);
 
     /**
      * Returns an exported function of the calling instance by name.
+     *
      */
     Optional<Function> getFunction(String name);
 
     /**
      * Returns an exported global of the calling instance by name.
+     *
      */
     Optional<Global> getGlobal(String name);
 
