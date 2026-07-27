@@ -4,12 +4,15 @@ import ai.tegmentum.wasmtime4j.Linker;
 import ai.tegmentum.wasmtime4j.WasmRuntime;
 import ai.tegmentum.wasmtime4j.WasmValue;
 import ai.tegmentum.wasmtime4j.WasmValueType;
+import ai.tegmentum.wasmtime4j.func.HostFunction;
 import ai.tegmentum.wasmtime4j.type.ExportType;
 import ai.tegmentum.wasmtime4j.type.FuncType;
 import ai.tegmentum.wasmtime4j.type.FunctionType;
 import ai.tegmentum.wasmtime4j.type.ImportType;
 import ai.tegmentum.wasmtime4j.type.WasmType;
 import ai.tegmentum.wasmtime4j.type.WasmTypeKind;
+import ai.tegmentum.webassembly4j.api.CallerAwareHostFunction;
+import ai.tegmentum.webassembly4j.api.CallerAwareHostFunctionDefinition;
 import ai.tegmentum.webassembly4j.api.ExportDescriptor;
 import ai.tegmentum.webassembly4j.api.ExternImportDefinition;
 import ai.tegmentum.webassembly4j.api.ExternType;
@@ -37,6 +40,7 @@ final class WasmtimeModuleAdapter implements Module {
     private final ai.tegmentum.wasmtime4j.Module nativeModule;
     private final ai.tegmentum.wasmtime4j.Store store;
     private final ai.tegmentum.wasmtime4j.config.EngineConfig engineConfig;
+    private final boolean callerScoped;
 
     WasmtimeModuleAdapter(WasmRuntime runtime,
                           ai.tegmentum.wasmtime4j.Engine engine,
@@ -48,10 +52,46 @@ final class WasmtimeModuleAdapter implements Module {
         this.nativeModule = nativeModule;
         this.store = store;
         this.engineConfig = engineConfig;
+        this.callerScoped = false;
+    }
+
+    private WasmtimeModuleAdapter(WasmRuntime runtime,
+                                  ai.tegmentum.wasmtime4j.Engine engine,
+                                  ai.tegmentum.wasmtime4j.Module nativeModule,
+                                  ai.tegmentum.wasmtime4j.config.EngineConfig engineConfig) {
+        this.runtime = runtime;
+        this.engine = engine;
+        this.nativeModule = nativeModule;
+        this.store = null;
+        this.engineConfig = engineConfig;
+        this.callerScoped = true;
+    }
+
+    /**
+     * Construct a caller-scoped Module wrapper — used only by
+     * {@link WasmtimeCallerAdapter#compileModule(byte[])} to hand back a
+     * Module that borrows the caller's implicit store. Caller-scoped
+     * modules must be instantiated via
+     * {@link WasmtimeCallerAdapter#instantiate(Module, LinkingContext)};
+     * their own {@code instantiate()} paths throw
+     * {@link IllegalStateException} because they have no owning store.
+     */
+    static WasmtimeModuleAdapter callerScoped(
+            WasmRuntime runtime,
+            ai.tegmentum.wasmtime4j.Engine engine,
+            ai.tegmentum.wasmtime4j.Module nativeModule,
+            ai.tegmentum.wasmtime4j.config.EngineConfig engineConfig) {
+        return new WasmtimeModuleAdapter(runtime, engine, nativeModule, engineConfig);
     }
 
     @Override
     public Instance instantiate() {
+        if (callerScoped) {
+            throw new IllegalStateException(
+                    "This Module was produced by Caller.compileModule and has no"
+                            + " owning store. Instantiate it via"
+                            + " Caller.instantiate(Module, LinkingContext) instead.");
+        }
         try {
             Linker<Object> linker = runtime.createLinker(engine);
             ai.tegmentum.wasmtime4j.Instance nativeInstance =
@@ -65,36 +105,33 @@ final class WasmtimeModuleAdapter implements Module {
 
     @Override
     public Instance instantiate(LinkingContext linkingContext) {
+        if (callerScoped) {
+            throw new IllegalStateException(
+                    "This Module was produced by Caller.compileModule and has no"
+                            + " owning store. Instantiate it via"
+                            + " Caller.instantiate(Module, LinkingContext) instead.");
+        }
         if (linkingContext == null) {
             return instantiate();
         }
 
         List<HostFunctionDefinition> hostFunctions = linkingContext.hostFunctions();
         List<ExternImportDefinition> externImports = linkingContext.externImports();
+        List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions =
+                linkingContext.callerAwareHostFunctions();
         if (hostFunctions.isEmpty()
                 && linkingContext.wasiContext() == null
-                && externImports.isEmpty()) {
+                && externImports.isEmpty()
+                && callerAwareHostFunctions.isEmpty()) {
             return instantiate();
         }
 
         try {
             Linker<Object> linker = runtime.createLinker(engine);
 
-            for (HostFunctionDefinition def : hostFunctions) {
-                FunctionType funcType = new FunctionType(
-                        convertToWasmTypes(def.parameterTypes()),
-                        convertToWasmTypes(def.resultTypes()));
+            defineHostFunctions(linker, hostFunctions);
 
-                linker.defineHostFunction(def.moduleName(), def.functionName(), funcType,
-                        wasmArgs -> {
-                            Object[] javaArgs = extractWasmValues(wasmArgs);
-                            Object[] results = def.function().execute(javaArgs);
-                            if (results == null || results.length == 0) {
-                                return new WasmValue[0];
-                            }
-                            return convertToWasmValues(results, def.resultTypes());
-                        });
-            }
+            defineCallerAwareHostFunctions(linker, callerAwareHostFunctions);
 
             ai.tegmentum.webassembly4j.api.WasiContext wasiCtx = linkingContext.wasiContext();
             if (wasiCtx != null) {
@@ -113,6 +150,73 @@ final class WasmtimeModuleAdapter implements Module {
             return new WasmtimeInstanceAdapter(nativeInstance, runtime, engine);
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new LinkingException("Failed to instantiate with linking context", e);
+        }
+    }
+
+    /**
+     * Wire non-caller-aware host functions into the linker. Extracted so it
+     * can be shared with the caller-scoped instantiate path in
+     * {@link WasmtimeCallerAdapter}.
+     */
+    static void defineHostFunctions(Linker<Object> linker,
+                                     List<HostFunctionDefinition> hostFunctions)
+            throws ai.tegmentum.wasmtime4j.exception.WasmException {
+        for (HostFunctionDefinition def : hostFunctions) {
+            FunctionType funcType = new FunctionType(
+                    convertToWasmTypes(def.parameterTypes()),
+                    convertToWasmTypes(def.resultTypes()));
+
+            linker.defineHostFunction(def.moduleName(), def.functionName(), funcType,
+                    wasmArgs -> {
+                        Object[] javaArgs = extractWasmValues(wasmArgs);
+                        Object[] results = def.function().execute(javaArgs);
+                        if (results == null || results.length == 0) {
+                            return new WasmValue[0];
+                        }
+                        return convertToWasmValues(results, def.resultTypes());
+                    });
+        }
+    }
+
+    /**
+     * Wire caller-aware host functions into the linker. Each definition is
+     * registered as a wasmtime4j {@code CallerAwareHostFunction} — the
+     * subclass of {@link HostFunction} whose {@code execute} runs with the
+     * native {@link ai.tegmentum.wasmtime4j.func.Caller} available. The
+     * native caller is looked up via wasmtime4j's
+     * {@code CallerContextProvider} SPI (already wired for JNI in
+     * wasmtime4j r.2), wrapped in a {@link WasmtimeCallerAdapter}, and
+     * handed to the user's {@link CallerAwareHostFunction} implementation.
+     */
+    void defineCallerAwareHostFunctions(
+            Linker<Object> linker,
+            List<CallerAwareHostFunctionDefinition> callerAwareHostFunctions)
+            throws ai.tegmentum.wasmtime4j.exception.WasmException {
+        for (CallerAwareHostFunctionDefinition def : callerAwareHostFunctions) {
+            FunctionType funcType = new FunctionType(
+                    convertToWasmTypes(def.parameterTypes()),
+                    convertToWasmTypes(def.resultTypes()));
+
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            HostFunction impl = new HostFunction.CallerAwareHostFunction(
+                    (HostFunction.MultiValueHostFunctionWithCaller<Object>) (nativeCaller,
+                                                                              wasmArgs) -> {
+                        @SuppressWarnings({"rawtypes"})
+                        WasmtimeCallerAdapter callerAdapter = new WasmtimeCallerAdapter(
+                                nativeCaller, runtime, engineConfig);
+                        Object[] javaArgs = extractWasmValues(wasmArgs);
+                        @SuppressWarnings({"unchecked", "rawtypes"})
+                        CallerAwareHostFunction fn =
+                                (CallerAwareHostFunction) def.function();
+                        @SuppressWarnings("unchecked")
+                        Object[] results = fn.execute(callerAdapter, javaArgs);
+                        if (results == null || results.length == 0) {
+                            return new WasmValue[0];
+                        }
+                        return convertToWasmValues(results, def.resultTypes());
+                    });
+
+            linker.defineHostFunction(def.moduleName(), def.functionName(), funcType, impl);
         }
     }
 
@@ -256,13 +360,37 @@ final class WasmtimeModuleAdapter implements Module {
     public <T> Optional<T> extension(Class<T> extensionType) {
         if (extensionType == ai.tegmentum.webassembly4j.api.capability.FuelController.class
                 && engine.isFuelEnabled()) {
+            if (callerScoped) {
+                // Caller-scoped modules borrow the caller's store; the
+                // FuelController on the caller's store is reached via the
+                // Caller api, not through this Module handle.
+                return Optional.empty();
+            }
             return Optional.of((T) new WasmtimeFuelController(store));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Provider escape — returns the underlying native handle when the
+     * caller wants to reach the wasmtime4j-native Module directly (used by
+     * {@link WasmtimeCallerAdapter#instantiate(Module, LinkingContext)} to
+     * bridge back to the wasmtime4j linker).
+     */
+    @SuppressWarnings("unchecked")
+    <T> Optional<T> unwrap(Class<T> nativeType) {
+        if (nativeType.isInstance(nativeModule)) {
+            return Optional.of((T) nativeModule);
         }
         return Optional.empty();
     }
 
     ai.tegmentum.wasmtime4j.Store store() {
         return store;
+    }
+
+    ai.tegmentum.wasmtime4j.Module nativeModule() {
+        return nativeModule;
     }
 
     private static void configureNativeWasi(ai.tegmentum.wasmtime4j.wasi.WasiContext nativeWasi,
@@ -344,6 +472,8 @@ final class WasmtimeModuleAdapter implements Module {
     @Override
     public void close() {
         nativeModule.close();
-        store.close();
+        if (store != null && !callerScoped) {
+            store.close();
+        }
     }
 }
