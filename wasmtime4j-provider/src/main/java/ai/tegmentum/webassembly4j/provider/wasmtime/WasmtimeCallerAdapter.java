@@ -1,17 +1,23 @@
 package ai.tegmentum.webassembly4j.provider.wasmtime;
 
 import ai.tegmentum.wasmtime4j.WasmFunction;
+import ai.tegmentum.wasmtime4j.WasmGlobal;
 import ai.tegmentum.wasmtime4j.WasmMemory;
 import ai.tegmentum.wasmtime4j.WasmRuntime;
 import ai.tegmentum.wasmtime4j.WasmTable;
 import ai.tegmentum.webassembly4j.api.Caller;
+import ai.tegmentum.webassembly4j.api.ExternImportDefinition;
 import ai.tegmentum.webassembly4j.api.Function;
+import ai.tegmentum.webassembly4j.api.FunctionImport;
 import ai.tegmentum.webassembly4j.api.Global;
+import ai.tegmentum.webassembly4j.api.GlobalImport;
 import ai.tegmentum.webassembly4j.api.Instance;
 import ai.tegmentum.webassembly4j.api.LinkingContext;
 import ai.tegmentum.webassembly4j.api.Memory;
+import ai.tegmentum.webassembly4j.api.MemoryImport;
 import ai.tegmentum.webassembly4j.api.Module;
 import ai.tegmentum.webassembly4j.api.Table;
+import ai.tegmentum.webassembly4j.api.TableImport;
 import ai.tegmentum.webassembly4j.api.exception.ExecutionException;
 import ai.tegmentum.webassembly4j.api.exception.LinkingException;
 
@@ -58,12 +64,14 @@ final class WasmtimeCallerAdapter<T> implements Caller<T> {
 
     @Override
     public Optional<Memory> getMemory(String name) {
-        return nativeCaller.getMemory(name).map(WasmtimeMemoryAdapter::new);
+        return nativeCaller.getMemory(name)
+                .map(mem -> new WasmtimeMemoryAdapter(mem, name));
     }
 
     @Override
     public Optional<Table> getTable(String name) {
-        return nativeCaller.getTable(name).map(WasmtimeTableAdapter::new);
+        return nativeCaller.getTable(name)
+                .map(tbl -> new WasmtimeTableAdapter(tbl, name));
     }
 
     @Override
@@ -137,15 +145,7 @@ final class WasmtimeCallerAdapter<T> implements Caller<T> {
         try {
             ai.tegmentum.wasmtime4j.Linker<Object> linker = runtime.createLinker(callerEngine);
             if (imports != null) {
-                if (!imports.externImports().isEmpty()) {
-                    throw new LinkingException(
-                            "Caller.instantiate does not support externImports"
-                                    + " (memory/table/global imports need a live"
-                                    + " store binding that the caller-scoped path"
-                                    + " does not expose). Provide these via"
-                                    + " hostFunctions or caller-aware host"
-                                    + " functions instead.");
-                }
+                defineCallerScopedExternImports(linker, imports.externImports());
                 WasmtimeModuleAdapter.defineHostFunctions(linker, imports.hostFunctions());
                 // Nested caller-aware host functions on an inner module
                 // instantiated inside a callback are permitted — they
@@ -170,6 +170,90 @@ final class WasmtimeCallerAdapter<T> implements Caller<T> {
         } catch (ai.tegmentum.wasmtime4j.exception.WasmException e) {
             throw new LinkingException(
                     "Caller-scoped instantiate failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Wire {@code MemoryImport} / {@code TableImport} / {@code GlobalImport}
+     * defs from the caller into a transient linker, using the caller's live
+     * store context via
+     * {@link ai.tegmentum.wasmtime4j.func.Caller#linkerDefineMemory} /
+     * {@code linkerDefineTable} / {@code linkerDefineGlobal}. Mirrors
+     * {@code WasmtimeModuleAdapter.defineExternImports} but routes through
+     * the scoped-caller path so no {@code Store} handle is needed —
+     * F-Wasmtime4j-Caller-Scoped-Instantiate-Extern-Imports r.1 landed
+     * these ops on the wasmtime4j Caller interface at 1.5.2.
+     *
+     * <p>{@link FunctionImport} remains unsupported here — the api-layer
+     * {@link ai.tegmentum.webassembly4j.api.Function Function} interface has
+     * no {@code unwrap(Class)} method, matching the same limitation as the
+     * outer path.
+     */
+    private void defineCallerScopedExternImports(
+            ai.tegmentum.wasmtime4j.Linker<Object> linker,
+            java.util.List<ExternImportDefinition> externImports)
+            throws ai.tegmentum.wasmtime4j.exception.WasmException {
+        if (externImports == null || externImports.isEmpty()) {
+            return;
+        }
+        for (ExternImportDefinition def : externImports) {
+            if (def instanceof MemoryImport) {
+                MemoryImport mi = (MemoryImport) def;
+                if (mi.memory() instanceof WasmtimeMemoryAdapter
+                        && ((WasmtimeMemoryAdapter) mi.memory()).callerExportName() != null) {
+                    nativeCaller.linkerDefineMemoryFromExport(
+                            linker,
+                            mi.moduleName(),
+                            mi.name(),
+                            ((WasmtimeMemoryAdapter) mi.memory()).callerExportName());
+                } else {
+                    WasmMemory nativeMemory =
+                            mi.memory().unwrap(WasmMemory.class)
+                                    .orElseThrow(() -> new LinkingException(
+                                            "MemoryImport " + mi.moduleName() + "::" + mi.name()
+                                                    + " memory is not a wasmtime4j-backed instance"));
+                    nativeCaller.linkerDefineMemory(
+                            linker, mi.moduleName(), mi.name(), nativeMemory);
+                }
+            } else if (def instanceof TableImport) {
+                TableImport ti = (TableImport) def;
+                if (ti.table() instanceof WasmtimeTableAdapter
+                        && ((WasmtimeTableAdapter) ti.table()).callerExportName() != null) {
+                    nativeCaller.linkerDefineTableFromExport(
+                            linker,
+                            ti.moduleName(),
+                            ti.name(),
+                            ((WasmtimeTableAdapter) ti.table()).callerExportName());
+                } else {
+                    WasmTable nativeTable =
+                            ti.table().unwrap(WasmTable.class)
+                                    .orElseThrow(() -> new LinkingException(
+                                            "TableImport " + ti.moduleName() + "::" + ti.name()
+                                                    + " table is not a wasmtime4j-backed instance"));
+                    nativeCaller.linkerDefineTable(
+                            linker, ti.moduleName(), ti.name(), nativeTable);
+                }
+            } else if (def instanceof GlobalImport) {
+                GlobalImport gi = (GlobalImport) def;
+                WasmGlobal nativeGlobal =
+                        gi.global().unwrap(WasmGlobal.class)
+                                .orElseThrow(() -> new LinkingException(
+                                        "GlobalImport " + gi.moduleName() + "::" + gi.name()
+                                                + " global is not a wasmtime4j-backed instance"));
+                nativeCaller.linkerDefineGlobal(linker, gi.moduleName(), gi.name(), nativeGlobal);
+            } else if (def instanceof FunctionImport) {
+                FunctionImport fi = (FunctionImport) def;
+                throw new UnsupportedOperationException(
+                        "FunctionImport " + fi.moduleName() + "::" + fi.name()
+                                + " is not yet supported by wasmtime4j-provider caller-scoped"
+                                + " instantiate — the api-layer Function interface has no"
+                                + " unwrap(Class) accessor. Use LinkingContext addHostFunction"
+                                + " or addCallerAwareHostFunction instead.");
+            } else {
+                throw new LinkingException(
+                        "Unknown ExternImportDefinition variant: "
+                                + (def == null ? "null" : def.getClass().getName()));
+            }
         }
     }
 
