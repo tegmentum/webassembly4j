@@ -47,20 +47,23 @@ Selected via `EngineSelection.byId("wasmos")`; provider priority 90.
 
 ## Build setup — REQUIRES sibling repository checkouts
 
-`wasmos-runtime` (this module's Rust dep) declares path deps on other
-tegmentum repositories that must be co-checked-out at fixed relative
-paths. **Building this crate from a fresh clone of `webassembly4j`
-alone WILL fail.** You need:
+`wasmos-runtime` (this module's Rust dep) is declared via a RELATIVE
+path (`../../../wasmos` from `wasmos-provider/native/Cargo.toml`),
+which itself declares path deps on other tegmentum repositories that
+must be co-checked-out at fixed relative paths. **Building this crate
+from a fresh clone of `webassembly4j` alone WILL fail.** You need
+four sibling checkouts:
 
 ```
 ~/git/webassembly4j        (this repo)
-~/git/wasmos               (wasmos-provider/native/Cargo.toml points here)
-~/git/wasm-cm              (wasmos's sibling path dep)
-~/git/wasm-continuity      (wasmos's sibling path dep)
+~/git/wasmos               (wasmos-provider/native/Cargo.toml points here via ../../../wasmos)
+~/git/wasm-cm              (wasmos's sibling path dep, ../wasm-cm/...)
+~/git/wasm-continuity      (wasmos's sibling path dep, ../wasm-continuity/...)
 ```
 
-Once all four are checked out at the same parent, `cd wasmos-provider &&
-mvn install` from the webassembly4j root works.
+Once all four are checked out at the same parent (any parent — the
+paths are all relative), `cd wasmos-provider && mvn install` from the
+webassembly4j root works.
 
 ### Why not git-dep?
 

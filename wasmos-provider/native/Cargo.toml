@@ -13,15 +13,22 @@ name = "wasmos_provider"
 crate-type = ["cdylib"]
 
 [dependencies]
-# wasmos-runtime dep — REQUIRES a co-checked-out ~/git/wasmos sibling
-# tree AND sibling checkouts of ~/git/wasm-cm and ~/git/wasm-continuity
-# because wasmos-runtime's own Cargo.toml declares path deps to those
-# siblings (../wasm-cm/hosts/rust, ../wasm-continuity/crates/...).
+# wasmos-runtime dep — RELATIVE path (../../../wasmos) resolves against
+# a co-checked-out sibling tegmentum working tree. Same tree also needs
+# ~/git/wasm-cm and ~/git/wasm-continuity because wasmos-runtime's own
+# Cargo.toml declares path deps to those siblings.
+#
+# Standard developer layout expected:
+#
+#   ~/git/webassembly4j        (this repo)
+#   ~/git/wasmos               (../../../wasmos from wasmos-provider/native/)
+#   ~/git/wasm-cm              (wasmos's sibling path dep)
+#   ~/git/wasm-continuity      (wasmos's sibling path dep)
 #
 # A git-dep pinned to tegmentum/wasmos main fails to resolve at build
 # time — cargo fetches wasmos but the sibling `../wasm-cm/...` and
-# `../wasm-continuity/...` paths don't exist in the fetched tree.
-# Same problem would hit crates.io publication.
+# `../wasm-continuity/...` paths don't exist in the fetched tree. Same
+# problem would hit crates.io publication.
 #
 # Unblocking external / CI builds needs one of:
 #   1. wasmos + wasm-cm + wasm-continuity publish versioned crates.
@@ -29,16 +36,8 @@ crate-type = ["cdylib"]
 #      siblings — no more `path = "../<sibling>/..."`.
 #   3. Fork wasmos into a git-dep-clean tree we control.
 #
-# Until then this crate only builds from a developer's checkout that
-# mirrors the tegmentum working-tree layout:
-#
-#   ~/git/webassembly4j        (this repo)
-#   ~/git/wasmos               (path dep target below)
-#   ~/git/wasm-cm              (wasmos's sibling path dep)
-#   ~/git/wasm-continuity      (wasmos's sibling path dep)
-#
 # See wasmos-provider/README.md for the full build-setup story.
-wasmos-runtime = { path = "/Users/zacharywhitley/git/wasmos" }
+wasmos-runtime = { path = "../../../wasmos" }
 
 # Must match wasmos-runtime's wasmtime pin (47.0.2). Using anything else
 # would compile-fail against wasmos-runtime's public wasmtime types
