@@ -1,0 +1,72 @@
+[package]
+name = "wasmos-provider-native"
+version = "0.1.0"
+edition = "2021"
+description = "JNI wrapper crate for wasmos-runtime, backing the webassembly4j wasmos-provider"
+license = "Apache-2.0"
+
+[lib]
+# webassembly4j's Java layer loads the resulting dylib via System.load() at
+# ServiceLoader-discovery time; a cdylib gives us the plain shared object with
+# the right #[no_mangle] extern "C" symbols on macOS / Linux / Windows.
+name = "wasmos_provider"
+crate-type = ["cdylib"]
+
+[dependencies]
+# wasmos-runtime dep — REQUIRES a co-checked-out ~/git/wasmos sibling
+# tree AND sibling checkouts of ~/git/wasm-cm and ~/git/wasm-continuity
+# because wasmos-runtime's own Cargo.toml declares path deps to those
+# siblings (../wasm-cm/hosts/rust, ../wasm-continuity/crates/...).
+#
+# A git-dep pinned to tegmentum/wasmos main fails to resolve at build
+# time — cargo fetches wasmos but the sibling `../wasm-cm/...` and
+# `../wasm-continuity/...` paths don't exist in the fetched tree.
+# Same problem would hit crates.io publication.
+#
+# Unblocking external / CI builds needs one of:
+#   1. wasmos + wasm-cm + wasm-continuity publish versioned crates.
+#   2. wasmos restructures to git-dep (or workspace-internal) its
+#      siblings — no more `path = "../<sibling>/..."`.
+#   3. Fork wasmos into a git-dep-clean tree we control.
+#
+# Until then this crate only builds from a developer's checkout that
+# mirrors the tegmentum working-tree layout:
+#
+#   ~/git/webassembly4j        (this repo)
+#   ~/git/wasmos               (path dep target below)
+#   ~/git/wasm-cm              (wasmos's sibling path dep)
+#   ~/git/wasm-continuity      (wasmos's sibling path dep)
+#
+# See wasmos-provider/README.md for the full build-setup story.
+wasmos-runtime = { path = "/Users/zacharywhitley/git/wasmos" }
+
+# Must match wasmos-runtime's wasmtime pin (47.0.2). Using anything else
+# would compile-fail against wasmos-runtime's public wasmtime types
+# (Engine / Component / Linker / Store).
+wasmtime = { version = "47.0.2", features = ["component-model-bytes"] }
+wasmtime-wasi = "47.0.2"
+
+# instantiate_async / call_async require a Tokio runtime; we drive one per
+# call inside the JNI shim rather than expecting the JVM caller to.
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# JNI bindings. Version tracks wasmtime4j-native's pin (0.21 is Java 8+
+# compatible and matches wasmtime4j-native/Cargo.toml at the time of this
+# scaffold).
+jni = "0.21"
+
+# Better panic diagnostics when the wrapper crashes on a JVM caller.
+anyhow = "1.0"
+
+# JSON marshalling for two-way Val <-> Java-object conversion across the
+# JNI boundary. Modelled on wasmtime4j-native's concurrent_call_json module —
+# the "trade compile speed for invoke correctness now, swap in binary later"
+# strategy. serde + serde_json are already deep transitive deps via wasmtime
+# so the compile-cost delta is zero.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = false
+codegen-units = 16

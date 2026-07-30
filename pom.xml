@@ -53,6 +53,8 @@
         <module>webassembly4j-bindgen</module>
         <module>webassembly4j-component-builder</module>
         <module>wasmos-embedder-generated</module>
+        <module>wasmos-runtime-generated</module>
+        <module>wasmos-provider</module>
     </modules>
 
     <properties>
@@ -91,6 +93,16 @@
             <dependency>
                 <groupId>ai.tegmentum.webassembly4j</groupId>
                 <artifactId>webassembly4j-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.webassembly4j</groupId>
+                <artifactId>wasmos-embedder-generated</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.tegmentum.webassembly4j</groupId>
+                <artifactId>wasmos-runtime-generated</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
