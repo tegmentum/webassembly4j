@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.logging.Logger;
 
 /**
  * Recursive-descent parser for the WebAssembly Interface Type (WIT) grammar.
@@ -62,6 +63,7 @@ import java.util.Optional;
  */
 public final class WitParser {
 
+  private static final Logger LOGGER = Logger.getLogger(WitParser.class.getName());
   private static final int MAX_WIT_TEXT_LENGTH = 1024 * 1024; // 1 MB
 
   private final List<WitToken> tokens;
@@ -637,6 +639,31 @@ public final class WitParser {
         final WitType optionInner = parseTypeExpression(scope);
         expect(WitToken.Kind.GT);
         return WitType.option(optionInner);
+      case "stream":
+      case "future":
+        // WIT component-model async types (WASI 0.2+). Bindgen doesn't model
+        // async semantics — codegen has no runtime plumbing for stream/future
+        // dispatch — so we lossy-coerce the SHAPE and emit a warning:
+        //   stream<T> → list<T>  (sequence of T; sync collection stand-in)
+        //   future<T> → option<T> (possibly-present T; sync option stand-in)
+        // Semantics change silently in the generated Java, but the alternative
+        // (crashing the whole parse — as happened before this coercion was
+        // added — kills every OTHER interface in the same file too). Users
+        // needing real async wrap the coerced types at their layer.
+        {
+          final String asyncKind = head;
+          advance();
+          expect(WitToken.Kind.LT);
+          final WitType asyncInner = parseTypeExpression(scope);
+          expect(WitToken.Kind.GT);
+          LOGGER.warning(
+              () -> asyncKind + "<T> coerced to "
+                  + ("stream".equals(asyncKind) ? "list<T>" : "option<T>")
+                  + " — bindgen does not model WIT component-model async types");
+          return "stream".equals(asyncKind)
+              ? WitType.list(asyncInner)
+              : WitType.option(asyncInner);
+        }
       case "result":
         advance();
         return parseResultTail(scope);
