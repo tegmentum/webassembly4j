@@ -30,9 +30,11 @@ import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
+import com.squareup.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -165,17 +167,27 @@ public final class ImplementationCodeGenerator {
         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
         .addSuperinterface(WASM_BINDING_PROVIDER_CLASS);
 
-    // supports() method
+    // supports() method — parameter type is Class<?> to match the SPI
+    // signature verbatim. Emitting a raw `Class` here triggered
+    // -Xlint:rawtypes; downstream projects that promote raw-type warnings
+    // to errors could not compile the generated file.
+    final TypeName classWildcard =
+        ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class));
     providerBuilder.addMethod(MethodSpec.methodBuilder("supports")
         .addModifiers(Modifier.PUBLIC)
         .addAnnotation(Override.class)
         .returns(boolean.class)
-        .addParameter(ClassName.get(Class.class), "iface")
+        .addParameter(classWildcard, "iface")
         .addStatement("return iface == $T.class", interfaceClass)
         .build());
 
-    // create() method
+    // create() method — parameter type is Class<T>, matching the SPI's
+    // `<T> T create(Class<T>, ...)` exactly. Before the fix the parameter
+    // was raw `Class`, so under erasure the override signature clashed
+    // with the SPI's parametrised one ("name clash: same erasure, yet
+    // neither overrides the other") and javac rejected the class.
     TypeVariableName typeVar = TypeVariableName.get("T");
+    final TypeName classOfT = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
     providerBuilder.addMethod(MethodSpec.methodBuilder("create")
         .addModifiers(Modifier.PUBLIC)
         .addAnnotation(Override.class)
@@ -184,7 +196,7 @@ public final class ImplementationCodeGenerator {
             .build())
         .addTypeVariable(typeVar)
         .returns(typeVar)
-        .addParameter(ClassName.get(Class.class), "iface")
+        .addParameter(classOfT, "iface")
         .addParameter(INSTANCE_CLASS, "instance")
         .addParameter(MODULE_CLASS, "module")
         .addParameter(ENGINE_CLASS, "engine")
@@ -409,13 +421,43 @@ public final class ImplementationCodeGenerator {
         method.addCode(
             MarshallingStrategy.resultDispatch(returnBindgenType, retptrLocal, function.getName()));
       } else if (complexReturn) {
-        CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, retptrLocal);
-        method.addStatement("return $L", liftCode);
+        emitLiftedReturn(method, returnBindgenType, retptrLocal, function.getName());
       } else {
-        CodeBlock liftCode = MarshallingStrategy.liftReturn(returnBindgenType, resultLocal);
-        method.addStatement("return $L", liftCode);
+        emitLiftedReturn(method, returnBindgenType, resultLocal, function.getName());
       }
     }
+  }
+
+  /**
+   * Emit either {@code return <liftedExpr>;} when a lifter is wired, or
+   * {@code throw new UnsupportedOperationException(...)} when
+   * {@link MarshallingStrategy#liftReturn} bails out. Before this helper the
+   * two return-lift sites blindly spliced the returned CodeBlock into
+   * {@code method.addStatement("return $L", liftCode)}, so an unwired kind
+   * produced {@code return /* TODO: lift REFERENCE *&#47;;} — a comment in
+   * value position that javac rejected with
+   * {@code incompatible types: missing return value}. Now the throw path
+   * mirrors {@link MarshallingStrategy#resultDispatch}: compileable body,
+   * loud runtime failure, actionable message.
+   */
+  private static void emitLiftedReturn(
+      MethodSpec.Builder method,
+      BindgenType returnType,
+      String valueVar,
+      String methodName) {
+    final java.util.Optional<CodeBlock> lifted =
+        MarshallingStrategy.liftReturn(returnType, valueVar);
+    if (lifted.isPresent()) {
+      method.addStatement("return $L", lifted.get());
+      return;
+    }
+    final String kind = returnType == null ? "null" : returnType.getKind().toString();
+    final String name = returnType == null ? "" : " (" + returnType.getName() + ")";
+    method.addStatement(
+        "throw new $T($S)",
+        UnsupportedOperationException.class,
+        "TODO(bindgen): lift " + kind + name + " return from "
+            + methodName + " not yet wired — see MarshallingStrategy#liftReturn");
   }
 
   /**

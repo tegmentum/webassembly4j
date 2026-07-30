@@ -1,0 +1,8 @@
+package wasmos:split-fixture@0.1.0;
+
+interface beta-api {
+    resource beta {
+        constructor(label: string);
+        echo: func(msg: string) -> string;
+    }
+}

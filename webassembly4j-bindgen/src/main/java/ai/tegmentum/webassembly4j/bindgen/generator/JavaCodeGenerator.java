@@ -34,6 +34,7 @@ import com.squareup.javapoet.TypeSpec;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.logging.Logger;
 import javax.lang.model.element.Modifier;
 
 /**
@@ -43,6 +44,8 @@ import javax.lang.model.element.Modifier;
  * styles (modern records vs legacy POJOs).
  */
 public abstract class JavaCodeGenerator {
+
+  private static final Logger LOGGER = Logger.getLogger(JavaCodeGenerator.class.getName());
 
   protected final BindgenConfig config;
   protected final TypeMappingRegistry typeRegistry;
@@ -73,19 +76,39 @@ public abstract class JavaCodeGenerator {
       sources.add(generateType(type));
     }
 
+    // Filter out interfaces whose Java class-name would collide with a
+    // nested type's Java class-name (same package = same simple name).
+    // WIT permits `interface X { record X { ... } }` — the two land in the
+    // same Java package as one `X.java`, and the record class overwrites
+    // the interface, breaking `implements X` in the generated Impl with
+    // "interface expected here" (ProviderManifestImpl in wasmos:runtime).
+    // See {@link #shouldSkipInterface}.
+    final List<BindgenInterface> emittedInterfaces = new ArrayList<>();
+    for (BindgenInterface iface : model.getInterfaces()) {
+      if (shouldSkipInterface(iface)) {
+        continue;
+      }
+      emittedInterfaces.add(iface);
+    }
+
     // Generate interfaces
     for (BindgenInterface iface : model.getInterfaces()) {
-      sources.add(generateInterface(iface));
-      // Generate types defined within interfaces
+      final boolean skipInterface = shouldSkipInterface(iface);
+      if (!skipInterface) {
+        sources.add(generateInterface(iface));
+      }
+      // Generate types defined within interfaces regardless — the record
+      // that caused the collision is still the intended output; only the
+      // now-empty interface + Impl scaffolding is dropped.
       for (BindgenType type : iface.getTypes()) {
         sources.add(generateType(type));
       }
     }
 
     // Generate implementation classes if enabled
-    if (config.isGenerateImplementations() && !model.getInterfaces().isEmpty()) {
+    if (config.isGenerateImplementations() && !emittedInterfaces.isEmpty()) {
       ImplementationCodeGenerator implGen = new ImplementationCodeGenerator(config);
-      sources.addAll(implGen.generate(model.getInterfaces()));
+      sources.addAll(implGen.generate(emittedInterfaces));
     }
 
     // Bindgen 2.0: emit runtime-provider SPI + registry when configured.
@@ -114,6 +137,77 @@ public abstract class JavaCodeGenerator {
     }
 
     return sources;
+  }
+
+  /**
+   * True when {@code iface} declares a nested type whose Java class-name would
+   * be identical to the interface's own Java class-name in the target package.
+   *
+   * <p>WIT allows an interface and a nested record/variant/enum to share the
+   * same identifier — {@code interface provider-manifest { record
+   * provider-manifest {...} }} in
+   * {@code wasmos:runtime/provider-manifest.wit} is a live example. Java
+   * cannot: both compile to {@code ProviderManifest.java} in the same
+   * package, and the second overwrites the first. The generated Impl then
+   * fails to compile with "interface expected here" against a class name.
+   *
+   * <p>When the interface has zero functions (it exists purely as a
+   * namespace for the nested types), skipping the interface + its Impl +
+   * BindingProvider is a safe, name-preserving fix — the nested types are
+   * still emitted as top-level classes in the package.
+   *
+   * <p>When the interface has functions, dropping it silently would delete
+   * user-visible API. This method throws {@link BindgenException} in that
+   * case so the caller sees a specific error directing them to rename the
+   * WIT identifier. A follow-on change may promote this to a real rename
+   * pass (append "Record" / "Variant" to the nested type's Java class); the
+   * current fix defers that surface change until it becomes required.
+   *
+   * @param iface the interface to check
+   * @return true when the interface should be skipped from code emission
+   * @throws BindgenException when the collision is present AND the interface
+   *     carries functions (a rename pass, not a skip, is required)
+   */
+  public static boolean shouldSkipInterface(final BindgenInterface iface) throws BindgenException {
+    final String ifaceClassName = JavaNaming.toClassName(iface.getName());
+    BindgenType collidingType = null;
+    for (BindgenType nested : iface.getTypes()) {
+      final String nestedClassName = JavaNaming.toClassName(nested.getName());
+      if (ifaceClassName.equals(nestedClassName)) {
+        collidingType = nested;
+        break;
+      }
+    }
+    if (collidingType == null) {
+      return false;
+    }
+    if (!iface.getFunctions().isEmpty()) {
+      throw new BindgenException(
+          "WIT interface '"
+              + iface.getName()
+              + "' contains a nested "
+              + collidingType.getKind().name().toLowerCase()
+              + " with the same identifier — both would map to '"
+              + ifaceClassName
+              + "' in the same Java package, and the interface carries "
+              + iface.getFunctions().size()
+              + " function(s) that cannot be silently dropped. Rename either the"
+              + " interface or the nested type in the WIT source (recommended:"
+              + " rename the nested type, since it is the source of the collision).");
+    }
+    LOGGER.warning(
+        "WIT interface '"
+            + iface.getName()
+            + "' contains a nested "
+            + collidingType.getKind().name().toLowerCase()
+            + " with the same identifier — both would map to '"
+            + ifaceClassName
+            + "' in the same Java package. The interface declares no functions,"
+            + " so it is effectively a namespace for the nested type; skipping"
+            + " the empty interface + its Impl + its BindingProvider. Rename the"
+            + " nested type in WIT if you want the interface to keep its own"
+            + " Java class.");
+    return true;
   }
 
   /**
@@ -416,6 +510,18 @@ public abstract class JavaCodeGenerator {
         TypeName okType = type.getOkType().map(this::mapType).orElse(null);
         TypeName errorType = type.getErrorType().map(this::mapType).orElse(null);
         return typeRegistry.mapResult(okType, errorType);
+      case TUPLE:
+        // Recurse into every element so a nested container (e.g. the
+        // `list<u8>` inside `tuple<string, list<u8>>`) is mapped to a real
+        // Java type instead of being echoed back as raw WIT source. Before
+        // this branch existed, TUPLE fell through to the REFERENCE default
+        // and mapGeneratedType was handed the whole `tuple<...>` string,
+        // which JavaPoet embedded verbatim into the emitted field type.
+        List<TypeName> tupleElements = new ArrayList<>(type.getTupleElements().size());
+        for (BindgenType elem : type.getTupleElements()) {
+          tupleElements.add(mapType(elem));
+        }
+        return typeRegistry.mapTuple(tupleElements);
       case REFERENCE:
         return typeRegistry.mapGeneratedType(type.getReferencedTypeName().get());
       default:

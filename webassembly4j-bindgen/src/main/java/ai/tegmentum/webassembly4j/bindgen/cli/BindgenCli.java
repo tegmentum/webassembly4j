@@ -22,10 +22,13 @@ import ai.tegmentum.webassembly4j.bindgen.CodeGenerator;
 import ai.tegmentum.webassembly4j.bindgen.CodeStyle;
 import ai.tegmentum.webassembly4j.bindgen.GeneratedSource;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.stream.Stream;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -220,12 +223,18 @@ public final class BindgenCli implements Callable<Integer> {
       }
 
       if (source.isDirectory()) {
-        // Collect all matching files from directory
-        File[] files = source.listFiles((dir, name) -> name.endsWith(extension));
-        if (files != null) {
-          for (File file : files) {
-            validPaths.add(file.toPath());
-          }
+        // Walk recursively so a WIT layout that nests dep packages under
+        // `deps/<pkg>/*.wit` (the wit-bindgen / wac convention) can be picked
+        // up in one go — `-w wit/deps` pulls in every package the top-level
+        // WIT `use`s, so combined-model merging (see CodeGenerator.generate)
+        // has the full type closure available for reference resolution.
+        try (Stream<Path> walk = Files.walk(source.toPath())) {
+          walk.filter(Files::isRegularFile)
+              .filter(p -> p.getFileName().toString().endsWith(extension))
+              .sorted()
+              .forEach(validPaths::add);
+        } catch (IOException e) {
+          System.err.println("Warning: Failed to walk directory " + source + ": " + e.getMessage());
         }
       } else if (source.getName().endsWith(extension)) {
         validPaths.add(source.toPath());

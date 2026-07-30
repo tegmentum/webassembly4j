@@ -94,18 +94,51 @@ public final class MarshallingStrategy {
         }
         return CodeBlock.of("$L.add($L);\n", argsListVar, javaVar);
 
-      case LIST:
+      case LIST: {
+        // Pre-fix, this branch was hard-coded to `(byte[]) (Object) javaVar`.
+        // That works only when the interface signature is `byte[]` — but
+        // TypeMappingRegistry.mapList maps `list<u8>` to `List<Byte>` (a
+        // parameterised List, not a Java array), so the emitted cast
+        // failed with "incompatible types: List<Byte> cannot be converted
+        // to byte[]" on every real caller. Choose the lowering shape from
+        // the WIT element type.
+        //
+        // * `list<u8>` / `list<s8>`: unbox the `List<Byte>` into a fresh
+        //   byte[], allocate + write, push (ptr, len) — the on-wire
+        //   Canonical-ABI shape for a list<u8>.
+        // * any other list<T>: no in-memory lowerer wired yet. Emit a
+        //   comment + pass the raw List through so the class compiles;
+        //   the invoke will still fail at runtime (Function.invoke can't
+        //   unbox a Java List into WASM operands), but the failure is
+        //   loud and specific instead of a compile-time cast error that
+        //   blocks the whole generated tree.
+        final BindgenType element = type.getElementType().orElse(null);
+        final boolean isByteList =
+            element != null
+                && element.getKind() == BindgenType.Kind.PRIMITIVE
+                && isByteWidePrimitive(element.getName());
+        if (isByteList) {
+          return CodeBlock.builder()
+              .addStatement("byte[] $L_bytes = new byte[$L.size()]", javaVar, javaVar)
+              .beginControlFlow("for (int $L_i = 0; $L_i < $L.size(); $L_i++)",
+                  javaVar, javaVar, javaVar, javaVar)
+              .addStatement("$L_bytes[$L_i] = $L.get($L_i)", javaVar, javaVar, javaVar, javaVar)
+              .endControlFlow()
+              .addStatement("int $L_ptr = marshal.allocator().allocate($L_bytes.length, 1)",
+                  javaVar, javaVar)
+              .addStatement("marshal.memory().write($L_ptr, $L_bytes)", javaVar, javaVar)
+              .addStatement("$L.add($L_ptr)", argsListVar, javaVar)
+              .addStatement("$L.add($L_bytes.length)", argsListVar, javaVar)
+              .build();
+        }
+        final String elementKind =
+            element == null ? "unknown" : element.getKind() + "(" + element.getName() + ")";
         return CodeBlock.builder()
-            .addStatement("byte[] $L_bytes = ($L instanceof byte[]) ? (byte[]) (Object) $L : null",
-                javaVar, javaVar, javaVar)
-            .beginControlFlow("if ($L_bytes != null)", javaVar)
-            .addStatement("int $L_ptr = marshal.allocator().allocate($L_bytes.length, 1)",
-                javaVar, javaVar)
-            .addStatement("marshal.memory().write($L_ptr, $L_bytes)", javaVar, javaVar)
-            .addStatement("$L.add($L_ptr)", argsListVar, javaVar)
-            .addStatement("$L.add($L_bytes.length)", argsListVar, javaVar)
-            .endControlFlow()
+            .add("// TODO(bindgen): lower list<$L> — only list<u8>/list<s8> has an "
+                + "in-memory lowerer wired today\n", elementKind)
+            .addStatement("$L.add($L)", argsListVar, javaVar)
             .build();
+      }
 
       case ENUM:
         return CodeBlock.of("$L.add($L.ordinal());\n", argsListVar, javaVar);
@@ -126,30 +159,62 @@ public final class MarshallingStrategy {
    * returned by {@code Function.invoke}; for complex types it names the
    * return-pointer local in linear memory.
    *
+   * <p>Returns {@link Optional#empty()} when the bindgen type has no
+   * in-memory (or in-register) lifter wired yet — references, options,
+   * variants, records, resources, and functions all fall through today.
+   * The caller is expected to fall back to a statement-level placeholder
+   * (an {@link UnsupportedOperationException} throw) in that case rather
+   * than splicing a comment into an expression position. Before this
+   * signature change the default arm returned {@code CodeBlock.of("/* TODO
+   * ... *&#47;")}, which the {@code ImplementationCodeGenerator} spliced
+   * into {@code return $L;} — producing {@code return /* TODO
+   * ... *&#47;;}, a comment where a value is required. That failed with
+   * {@code incompatible types: missing return value} on every wasmos
+   * interface returning a REFERENCE or OPTION (InfoImpl.getInfo,
+   * InfoImpl.provider). Mirrors the {@link #liftFromOffset} contract.
+   *
    * @param type the bindgen type
    * @param valueVar the variable name (result Object, or retptr for complex types)
-   * @return the lifting code block (an expression)
+   * @return the lifting-expression code block, or empty when unsupported
    */
-  public static CodeBlock liftReturn(BindgenType type, String valueVar) {
+  public static Optional<CodeBlock> liftReturn(BindgenType type, String valueVar) {
     if (type == null) {
-      return CodeBlock.of("null");
+      return Optional.of(CodeBlock.of("null"));
     }
 
     switch (type.getKind()) {
       case PRIMITIVE:
         if ("string".equals(type.getName())) {
-          return CodeBlock.of("marshal.reader().readString($L)", valueVar);
+          return Optional.of(CodeBlock.of("marshal.reader().readString($L)", valueVar));
         }
-        return liftPrimitive(type, valueVar);
+        return Optional.of(liftPrimitive(type, valueVar));
 
       case LIST:
-        return CodeBlock.of("marshal.reader().readBytes($L)", valueVar);
+        // list<u8> lifts as byte[]; other list<T> element kinds have no
+        // in-memory lifter yet. Bail to the fallback throw when the element
+        // isn't u8-shaped so we don't silently mis-lift.
+        {
+          final BindgenType element = type.getElementType().orElse(null);
+          if (element == null
+              || (element.getKind() == BindgenType.Kind.PRIMITIVE
+                  && isByteWidePrimitive(element.getName()))) {
+            return Optional.of(CodeBlock.of("marshal.reader().readBytes($L)", valueVar));
+          }
+          return Optional.empty();
+        }
 
       case ENUM:
-        return CodeBlock.of("/* TODO: lift enum from ordinal */");
-
+      case FLAGS:
+      case RECORD:
+      case VARIANT:
+      case OPTION:
+      case RESULT:
+      case TUPLE:
+      case REFERENCE:
+      case RESOURCE:
+      case FUNCTION:
       default:
-        return CodeBlock.of("/* TODO: lift $L */", type.getKind());
+        return Optional.empty();
     }
   }
 

@@ -22,6 +22,7 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -160,6 +161,28 @@ public final class TypeMappingRegistry {
   /**
    * Creates a tuple type for a WIT tuple.
    *
+   * <p>Mapping strategy:
+   *
+   * <ul>
+   *   <li>0 elements → {@link Void} (WIT unit / empty tuple).
+   *   <li>1 element → the element itself (a single-slot tuple is
+   *       structurally equal to the value; no wrapper needed).
+   *   <li>2 elements → {@link java.util.Map.Entry Map.Entry&lt;K, V&gt;} — a JDK
+   *       type, so the generated source has zero additional dependency and
+   *       compiles standalone. Covers the {@code list<tuple<string,
+   *       list<u8>>>} headers shape used by wasmos http/websocket.
+   *   <li>N &gt; 2 elements → parameterized {@code {basePackage}.tuple.TupleN}
+   *       placeholder. bindgen does not yet emit those classes; consumers
+   *       who need larger tuples must supply their own {@code TupleN}
+   *       records in that package.
+   * </ul>
+   *
+   * <p>The prior implementation dropped generic parameters (emitting the raw
+   * {@code Tuple2} class name), which also failed to compile — but silently,
+   * because bindgen's TUPLE-in-mapType branch was missing, so the raw name
+   * was never even reached from a record field. Now that mapType routes
+   * TUPLE through here, the output must be a real parameterized Java type.
+   *
    * @param elementTypes the element types
    * @return the tuple type name
    */
@@ -171,9 +194,19 @@ public final class TypeMappingRegistry {
     if (elementTypes.size() == 1) {
       return elementTypes.get(0);
     }
-    // Use a generated tuple type or built-in pair for 2 elements
-    String tupleName = "Tuple" + elementTypes.size();
-    return ClassName.get(basePackage + ".tuple", tupleName);
+    final TypeName[] boxed = new TypeName[elementTypes.size()];
+    for (int i = 0; i < elementTypes.size(); i++) {
+      boxed[i] = elementTypes.get(i).box();
+    }
+    if (elementTypes.size() == 2) {
+      return ParameterizedTypeName.get(ClassName.get(Map.Entry.class), boxed);
+    }
+    // Use a placeholder tuple type parameterised over the element types. Real
+    // support for arities > 2 needs a companion TupleN generator; see the
+    // Javadoc above. Emit parameterised form so at least the type parameters
+    // don't leak as raw class references when consumers plug in their own.
+    final String tupleName = "Tuple" + elementTypes.size();
+    return ParameterizedTypeName.get(ClassName.get(basePackage + ".tuple", tupleName), boxed);
   }
 
   /**

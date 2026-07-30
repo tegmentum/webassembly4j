@@ -562,6 +562,40 @@ class BindgenCliTest {
 
       assertEquals(0, exitCode);
     }
+
+    @Test
+    @DisplayName("--wit on a directory picks up nested .wit files recursively")
+    void shouldRecursivelyExpandDirectorySource(@TempDir Path tempDir) throws Exception {
+      // Mirror the wit-bindgen / wac layout: top-level `wit/foo.wit` plus a
+      // `wit/deps/<pkg>/*.wit` subdir carrying transitive package deps. A
+      // single `--wit wit/` invocation must pull both in so combined-model
+      // merging has the full type closure available for cross-package `use`
+      // resolution (wasmos:runtime references tegmentum:common/errors this way).
+      Path root = tempDir.resolve("wit");
+      Path deps = root.resolve("deps").resolve("mypkg");
+      Files.createDirectories(deps);
+      Files.writeString(root.resolve("top.wit"), VALID_WIT);
+      Files.writeString(
+          deps.resolve("nested.wit"),
+          "interface nested-api {\n  echo: func(s: string) -> string\n}");
+      Path outputDir = tempDir.resolve("output");
+
+      int exitCode =
+          new CommandLine(new BindgenCli())
+              .execute(
+                  "--wit", root.toString(),
+                  "--package", "com.example",
+                  "--output", outputDir.toString());
+
+      assertEquals(0, exitCode, "CLI must succeed with recursive directory expansion");
+      // Both interfaces must have been generated.
+      Path pkgDir = outputDir.resolve("com").resolve("example");
+      assertTrue(Files.exists(pkgDir.resolve("Test.java")),
+          "top-level `test` interface must generate Test.java");
+      assertTrue(Files.exists(pkgDir.resolve("NestedApi.java")),
+          "nested `nested-api` interface must generate NestedApi.java — "
+              + "directory expansion was not recursive");
+    }
   }
 
   @Nested

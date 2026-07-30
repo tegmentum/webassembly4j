@@ -1,0 +1,14 @@
+// Regression fixture for the deeply-nested container-in-record bug.
+// A record field with type `list<tuple<string, list<u8>>>` — the shape
+// used by http/http-streaming/websocket in wasmos:runtime — used to
+// generate `List<Tuple<string, list<u8>>>` (the inner types leak
+// through as raw WIT source instead of being mapped to Java types).
+// This fixture pins the fix so the surface compiles.
+package tegmentum:tuple-fixture@0.1.0;
+
+interface headers-api {
+    record request {
+        headers: list<tuple<string, list<u8>>>,
+    }
+    put: func(req: request);
+}

@@ -375,21 +375,32 @@ class TypeMappingRegistryTest {
     }
 
     @Test
-    @DisplayName("should return Tuple2 for two-element tuple")
-    void shouldReturnTuple2ForTwoElements() {
+    @DisplayName("should return parameterised Map.Entry for two-element tuple")
+    void shouldReturnMapEntryForTwoElements() {
+      // 2-tuples map to java.util.Map.Entry<K, V> — a JDK type, so the
+      // generated source compiles with no extra runtime dependency. Covers
+      // the wasmos `list<tuple<string, list<u8>>>` headers shape.
       TypeName result = registry.mapTuple(Arrays.asList(TypeName.INT, TypeName.LONG));
 
-      assertEquals(TEST_PACKAGE + ".tuple.Tuple2", result.toString());
+      assertEquals(
+          "java.util.Map.Entry<java.lang.Integer, java.lang.Long>", result.toString());
     }
 
     @Test
-    @DisplayName("should return TupleN for N-element tuple")
+    @DisplayName("should return parameterised TupleN for N-element tuple")
     void shouldReturnTupleNForNElements() {
+      // For arities > 2 we still emit the TupleN placeholder — but
+      // parameterised, so the type parameters aren't lost. Consumers who
+      // need larger tuples supply their own {basePackage}.tuple.TupleN.
       TypeName result =
           registry.mapTuple(
               Arrays.asList(TypeName.INT, TypeName.LONG, TypeName.FLOAT, TypeName.DOUBLE));
 
-      assertEquals(TEST_PACKAGE + ".tuple.Tuple4", result.toString());
+      assertEquals(
+          TEST_PACKAGE
+              + ".tuple.Tuple4<java.lang.Integer, java.lang.Long, java.lang.Float,"
+              + " java.lang.Double>",
+          result.toString());
     }
 
     @Test

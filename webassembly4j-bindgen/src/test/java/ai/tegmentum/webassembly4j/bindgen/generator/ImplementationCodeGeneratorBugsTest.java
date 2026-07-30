@@ -250,6 +250,240 @@ class ImplementationCodeGeneratorBugsTest {
 
   @Test
   @DisplayName(
+      "bug 3 (task #39): a WIT `list<u8>` parameter lowers a `List<Byte>` into linear memory")
+  void listU8ParamLowersFromListByte() throws Exception {
+    // Pre-fix, the LIST branch of MarshallingStrategy.lowerArgument was
+    // hard-coded to `(byte[]) (Object) javaVar` — but the interface
+    // signature is `List<Byte>` (TypeMappingRegistry.mapList wraps u8 in a
+    // parametrised List). javac rejected the cast with "incompatible
+    // types: List<Byte> cannot be converted to byte[]", which blocked
+    // every wasmos:runtime interface that carried a bytes payload
+    // (http.fetch, http-streaming.fetch, run.exec, websocket.send).
+    // Reproducer: fetch(body: list<u8>) — matches http-streaming/http.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("http-body")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("send")
+                    .addParameter("body", BindgenType.list(BindgenType.primitive("u8")))
+                    .build())
+            .build();
+
+    final GeneratedSource impl = generator().generate(Collections.singletonList(iface)).get(0);
+    final String content = impl.getContent();
+
+    // The broken pre-fix cast must be gone.
+    assertFalse(
+        content.contains("(byte[]) (Object) body"),
+        "list<u8> lowering must not cast a List<Byte> to byte[]:\n" + content);
+    assertFalse(
+        content.contains("body instanceof byte[]"),
+        "list<u8> lowering must not `instanceof byte[]` a List<Byte>:\n" + content);
+    // The replacement path unboxes the List<Byte> into a fresh byte[].
+    assertTrue(
+        content.contains("byte[] body_bytes = new byte[body.size()]"),
+        "expected List<Byte> → byte[] unbox, got:\n" + content);
+    assertTrue(
+        content.contains("body_bytes[body_i] = body.get(body_i)"),
+        "expected element-by-element unbox loop, got:\n" + content);
+    // (ptr, len) still lands in the args list — the on-wire shape for
+    // list<u8> under the Canonical ABI.
+    assertTrue(
+        content.contains("marshal.memory().write(body_ptr, body_bytes)"),
+        "expected byte[] write into linear memory, got:\n" + content);
+    assertTrue(
+        content.contains("args.add(body_ptr)") && content.contains("args.add(body_bytes.length)"),
+        "expected (ptr, len) push onto args list, got:\n" + content);
+
+    compileImpl(iface, impl);
+  }
+
+  @Test
+  @DisplayName(
+      "bug 3 (task #39): a WIT `list<T>` for a non-byte element compiles as a TODO instead of a byte[] cast")
+  void listNonBytesParamDoesNotAssumeByteArray() throws Exception {
+    // The same LIST branch bug also blew up on non-u8 element types —
+    // run.exec had `caps: list<capability>` and produced
+    // `List<Capability>` in the signature. The cast to byte[] fails the
+    // same way. The fix leaves an honest TODO comment for element kinds
+    // with no in-memory lowerer wired, and passes the raw List through
+    // so the class compiles. Reproducer uses `list<string>` — a JDK
+    // element type keeps the compile-check harness self-contained.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("runner")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("exec")
+                    .addParameter("names", BindgenType.list(BindgenType.primitive("string")))
+                    .build())
+            .build();
+
+    final GeneratedSource impl = generator().generate(Collections.singletonList(iface)).get(0);
+    final String content = impl.getContent();
+
+    assertFalse(
+        content.contains("(byte[]) (Object) names"),
+        "list<string> must not assume the value is byte[]:\n" + content);
+    assertTrue(
+        content.contains("TODO(bindgen): lower list<"),
+        "expected a TODO marker naming the unlowered element kind, got:\n" + content);
+    // Falls back to passing the raw list — compileable, runtime-visible.
+    assertTrue(
+        content.contains("args.add(names)"),
+        "expected the raw List to be pushed onto args as a fallback, got:\n" + content);
+
+    compileImpl(iface, impl);
+  }
+
+  @Test
+  @DisplayName(
+      "bug 4 (task #39): the *BindingProvider `create` override uses Class<T>, not raw Class")
+  void bindingProviderCreateUsesClassOfT() throws Exception {
+    // Pre-fix, generateBindingProvider emitted the `create` param as raw
+    // `Class iface` — the SPI signature is `<T> T create(Class<T> iface, …)`,
+    // so under erasure the override collided with the parametrised
+    // super-method ("name clash: same erasure, yet neither overrides the
+    // other") and the class was rejected as `not abstract`. The `supports`
+    // override had the same raw-type shape, which downstream projects with
+    // -Xlint:rawtypes / -Werror could not build. Every interface in
+    // wasmos:runtime (13 of them) tripped this — 39 of the 45 compile
+    // errors in the repro were variants of this one bug.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("calculator")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("add")
+                    .addParameter("a", BindgenType.primitive("i32"))
+                    .addParameter("b", BindgenType.primitive("i32"))
+                    .returnType(BindgenType.primitive("i32"))
+                    .build())
+            .build();
+
+    // The class-level `generator()` helper disables provider emission
+    // (mirrors most bugs-file tests, which only exercise Impl bodies).
+    // This test targets *BindingProvider specifically, so flip that on.
+    final ImplementationCodeGenerator providerGen =
+        new ImplementationCodeGenerator(
+            BindgenConfig.builder()
+                .packageName(PACKAGE)
+                .outputDirectory(Path.of("target/test-output"))
+                .addWitSource(Path.of("test.wit"))
+                .generateImplementations(true)
+                .generateServiceLoader(true)
+                .build());
+    final List<GeneratedSource> sources = providerGen.generate(Collections.singletonList(iface));
+    GeneratedSource providerSource = null;
+    for (GeneratedSource s : sources) {
+      if (s.getClassName().equals("CalculatorBindingProvider")) {
+        providerSource = s;
+      }
+    }
+    assertNotNull(providerSource, "CalculatorBindingProvider must be generated");
+    final String content = providerSource.getContent();
+
+    // No raw Class parameters — either as `Class iface` on a signature
+    // line, or as an unparameterised import-form landing next to iface.
+    assertFalse(
+        content.contains("Class iface"),
+        "provider must not name a raw `Class iface` parameter:\n" + content);
+    // supports() must take Class<?> to mirror the SPI verbatim.
+    assertTrue(
+        content.contains("supports(Class<?> iface)"),
+        "expected `supports(Class<?> iface)`, got:\n" + content);
+    // create() must take Class<T> so the override lands under the SPI's
+    // parametrised super-method.
+    assertTrue(
+        content.contains("<T> T create(Class<T> iface,"),
+        "expected `<T> T create(Class<T> iface, …)`, got:\n" + content);
+  }
+
+  @Test
+  @DisplayName(
+      "bug 5: a REFERENCE return with no in-memory lifter throws instead of splicing a bare TODO comment")
+  void referenceReturnEmitsThrowNotBareComment() throws Exception {
+    // Matches wasmos:runtime info.get-info — signature is `get-info: func()
+    // -> runtime-info` (a REFERENCE return). Pre-fix, MarshallingStrategy
+    // .liftReturn's default arm returned `CodeBlock.of("/* TODO: lift
+    // REFERENCE */")`. The caller spliced that into `return $L;`, producing
+    // `return /* TODO: lift REFERENCE */;` — a bare comment where javac
+    // demands an expression. Every wasmos interface returning an unlifted
+    // complex type (InfoImpl.getInfo, InfoImpl.provider) tripped this. The
+    // fix mirrors resultDispatch's fallback: emit an
+    // UnsupportedOperationException throw so the class compiles and the gap
+    // is explicit at runtime.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("info")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("get-info")
+                    .returnType(BindgenType.reference("runtime-info"))
+                    .build())
+            .build();
+
+    final GeneratedSource impl = generator().generate(Collections.singletonList(iface)).get(0);
+    final String content = impl.getContent();
+
+    assertFalse(
+        content.contains("return /* TODO: lift REFERENCE */"),
+        "reference return must not emit a bare TODO comment in return position:\n" + content);
+    assertTrue(
+        content.contains("throw new UnsupportedOperationException"),
+        "expected an UnsupportedOperationException throw for the unlifted REFERENCE return:\n"
+            + content);
+    assertTrue(
+        content.contains("TODO(bindgen): lift REFERENCE"),
+        "expected a REFERENCE-tagged TODO in the throw message so post-mortems can grep:\n"
+            + content);
+    assertTrue(
+        content.contains("MarshallingStrategy#liftReturn"),
+        "expected the throw message to point at MarshallingStrategy#liftReturn:\n" + content);
+
+    compileImpl(iface, impl);
+  }
+
+  @Test
+  @DisplayName(
+      "bug 5 (companion): an OPTION return with no in-memory lifter throws instead of splicing a bare TODO comment")
+  void optionReturnEmitsThrowNotBareComment() throws Exception {
+    // Matches wasmos:runtime info.provider — signature is `provider:
+    // func(feature: string) -> option<string>`. Same default-arm bug as the
+    // REFERENCE case: liftReturn returned a comment, the caller spliced it
+    // into a return statement, javac rejected the file. OPTION exercises
+    // the same fallback path as REFERENCE.
+    final BindgenInterface iface =
+        BindgenInterface.builder()
+            .name("info")
+            .addFunction(
+                BindgenFunction.builder()
+                    .name("provider")
+                    .addParameter("feature", BindgenType.primitive("string"))
+                    .returnType(BindgenType.option(BindgenType.primitive("string")))
+                    .build())
+            .build();
+
+    final GeneratedSource impl = generator().generate(Collections.singletonList(iface)).get(0);
+    final String content = impl.getContent();
+
+    assertFalse(
+        content.contains("return /* TODO: lift OPTION */"),
+        "option return must not emit a bare TODO comment in return position:\n" + content);
+    assertTrue(
+        content.contains("throw new UnsupportedOperationException"),
+        "expected an UnsupportedOperationException throw for the unlifted OPTION return:\n"
+            + content);
+    assertTrue(
+        content.contains("TODO(bindgen): lift OPTION"),
+        "expected an OPTION-tagged TODO in the throw message:\n" + content);
+
+    compileImpl(iface, impl);
+  }
+
+  @Test
+  @DisplayName(
       "bug 2 (companion): a result<i32, _> return lifts the ok arm from the payload offset")
   void resultReturnPrimitiveOkPayload() throws Exception {
     // Simplest ok-arm shape: primitive payload lifts via a bare
@@ -359,6 +593,23 @@ class ImplementationCodeGeneratorBugsTest {
     // Sibling record referenced by bug 2's Impl in the error-side of
     // WitResult<..., Error>. Idempotent for tests that don't reference it.
     units.add(sourceFile(PACKAGE + ".Error", "package " + PACKAGE + "; public class Error {}"));
+    // Stub every REFERENCE type the interface pulls in (as a param, return,
+    // or result-arm payload). New in bug 5 coverage — REFERENCE returns
+    // reach the compileImpl harness now that liftReturn no longer swallows
+    // them into a bare comment.
+    final java.util.Set<String> referencedTypes = new java.util.HashSet<>();
+    for (BindgenFunction f : iface.getFunctions()) {
+      for (var p : f.getParameters()) {
+        collectReferencedTypes(p.getType(), referencedTypes);
+      }
+      if (f.hasReturnType()) {
+        collectReferencedTypes(f.getReturnType().get(), referencedTypes);
+      }
+    }
+    referencedTypes.remove("Error"); // already added above
+    for (String ref : referencedTypes) {
+      units.add(sourceFile(PACKAGE + "." + ref, "package " + PACKAGE + "; public class " + ref + " {}"));
+    }
     units.add(sourceFile(PACKAGE + ".ApiStubs", STUB_SOURCE));
 
     final StringWriter diagnostics = new StringWriter();
@@ -397,6 +648,7 @@ class ImplementationCodeGeneratorBugsTest {
     final StringBuilder sb = new StringBuilder();
     sb.append("package ").append(PACKAGE).append(";\n");
     sb.append("import java.util.List;\n");
+    sb.append("import java.util.Optional;\n");
     sb.append("import ai.tegmentum.webassembly4j.bindgen.wit.WitResult;\n");
     sb.append("public interface ").append(pascal(iface.getName())).append(" {\n");
     for (BindgenFunction f : iface.getFunctions()) {
@@ -428,12 +680,40 @@ class ImplementationCodeGeneratorBugsTest {
     return typeDecl(f.getReturnType().get());
   }
 
+  /**
+   * Walk a bindgen type tree and add the Pascal-cased Java class-name of
+   * every REFERENCE leaf to {@code sink}. Used by {@link #compileImpl} to
+   * stub the sibling classes the generated Impl expects on the classpath.
+   */
+  private static void collectReferencedTypes(BindgenType t, java.util.Set<String> sink) {
+    if (t == null) {
+      return;
+    }
+    switch (t.getKind()) {
+      case REFERENCE:
+        sink.add(pascal(t.getReferencedTypeName().orElse(t.getName())));
+        break;
+      case LIST:
+      case OPTION:
+        collectReferencedTypes(t.getElementType().orElse(null), sink);
+        break;
+      case RESULT:
+        collectReferencedTypes(t.getOkType().orElse(null), sink);
+        collectReferencedTypes(t.getErrorType().orElse(null), sink);
+        break;
+      default:
+        break;
+    }
+  }
+
   private static String typeDecl(BindgenType t) {
     switch (t.getKind()) {
       case PRIMITIVE:
         return primitiveDecl(t.getName());
       case LIST:
         return "List<" + boxDecl(t.getElementType().get()) + ">";
+      case OPTION:
+        return "Optional<" + boxDecl(t.getElementType().get()) + ">";
       case RESULT:
         String ok = t.getOkType().map(ImplementationCodeGeneratorBugsTest::boxDecl).orElse("Void");
         String err =

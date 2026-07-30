@@ -316,6 +316,47 @@ class WitParserTest {
     assertEquals(2, doc.getInterfaces().get(0).getFunctions().size());
   }
 
+  @Test
+  @DisplayName("stream<T> and future<T> parse (coerced to list<T> / option<T>)")
+  void asyncTypesCoerced() throws BindgenException {
+    // WASI 0.2+ async types. Before the coercion, `stream<u8>` at a record
+    // field or function signature threw BindgenException at parse time and
+    // killed every other declaration in the same file (see the wasmos
+    // http-streaming.wit case). The coercion keeps the surrounding file
+    // parseable at the cost of documented semantic loss.
+    final String src =
+        "interface i {\n"
+            + "  record streaming-response {\n"
+            + "    status: u16,\n"
+            + "    body: stream<u8>,\n"
+            + "  }\n"
+            + "  wait-one: func() -> future<u32>;\n"
+            + "  stream-of-strings: func() -> stream<string>;\n"
+            + "}\n";
+    final WitDocument doc = WitParser.parse(src);
+    final WitDocument.ParsedInterface pi = doc.getInterfaces().get(0);
+
+    // The record survived — body field's stream<u8> coerced to list<u8>.
+    final WitType record = pi.getTypes().get("streaming-response");
+    assertNotNull(record, "record with stream field must parse");
+    assertEquals(WitTypeCategory.RECORD, record.getKind().getCategory());
+    final WitType bodyField = record.getKind().getRecordFields().get("body");
+    assertNotNull(bodyField, "body field present");
+    assertEquals(WitTypeCategory.LIST, bodyField.getKind().getCategory(),
+        "stream<u8> must coerce to LIST category");
+
+    // Both functions parsed.
+    assertEquals(2, pi.getFunctions().size());
+    assertEquals(
+        WitTypeCategory.OPTION,
+        pi.getFunctions().get("wait-one").getReturnTypes().get(0).getKind().getCategory(),
+        "future<u32> must coerce to OPTION category");
+    assertEquals(
+        WitTypeCategory.LIST,
+        pi.getFunctions().get("stream-of-strings").getReturnTypes().get(0).getKind().getCategory(),
+        "stream<string> must coerce to LIST category");
+  }
+
   // ---------------------------------------------------------------------------
   // resource + type-expression interplay
   // ---------------------------------------------------------------------------

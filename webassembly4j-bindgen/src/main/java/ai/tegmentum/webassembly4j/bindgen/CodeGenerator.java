@@ -98,14 +98,22 @@ public final class CodeGenerator {
   public List<GeneratedSource> generate() throws BindgenException {
     List<GeneratedSource> allSources = new ArrayList<>();
 
-    // Process WIT sources
+    // Process WIT sources. Multiple WIT files that share a package (typical
+    // for WIT packages split by interface, e.g. wasmos:runtime@0.2.0 across
+    // 11 files) must be MERGED into one BindgenModel before code emission —
+    // otherwise per-file javaCodeGenerator invocations each emit their own
+    // <RuntimeProvider>.java, and the last write silently overwrites the
+    // earlier ones. Merging preserves every interface's resource dispatchers
+    // in the SPI and every type/interface/function in the output.
     if (config.hasWitSources()) {
       LOGGER.info("Processing WIT sources...");
+      BindgenModel combined = null;
       for (Path witPath : config.getWitSources()) {
         BindgenModel model = parseWitSource(witPath);
-        List<GeneratedSource> sources = javaCodeGenerator.generate(model);
-        allSources.addAll(sources);
-        LOGGER.fine("Generated " + sources.size() + " sources from " + witPath);
+        combined = (combined == null) ? model : combined.merge(model);
+      }
+      if (combined != null) {
+        allSources.addAll(javaCodeGenerator.generate(combined));
       }
     }
 
@@ -143,7 +151,16 @@ public final class CodeGenerator {
       if (config.hasWitSources()) {
         for (Path witPath : config.getWitSources()) {
           BindgenModel model = parseWitSource(witPath);
-          allInterfaces.addAll(model.getInterfaces());
+          for (BindgenInterface iface : model.getInterfaces()) {
+            // Skip interfaces whose Impl + BindingProvider weren't emitted
+            // upstream (e.g. an interface whose Java class-name collides
+            // with a nested type). Registering a non-existent provider in
+            // META-INF/services would fail ServiceLoader.load at runtime.
+            if (JavaCodeGenerator.shouldSkipInterface(iface)) {
+              continue;
+            }
+            allInterfaces.add(iface);
+          }
         }
       }
       if (!allInterfaces.isEmpty()) {

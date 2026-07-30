@@ -1,0 +1,8 @@
+package wasmos:split-fixture@0.1.0;
+
+interface alpha-api {
+    resource alpha {
+        constructor(seed: u32);
+        ping: func() -> u32;
+    }
+}
