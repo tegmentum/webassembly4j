@@ -15,6 +15,8 @@ import java.util.List;
 public interface EmbedderRuntime {
   HostProvider hostProviderCreate(String interfaceName, int numFuncs);
 
+  void hostProviderAttachMemory(long handle, HostProviderMemory mem);
+
   void hostProviderClose(long handle);
 
   WitResult<RuntimeInstance, Error> runtimeInstanceInstantiate(List<Byte> componentBytes,

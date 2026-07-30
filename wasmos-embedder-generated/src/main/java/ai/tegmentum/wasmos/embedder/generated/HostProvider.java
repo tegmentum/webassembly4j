@@ -24,4 +24,8 @@ public class HostProvider implements AutoCloseable {
   public static HostProvider create(String interfaceName, int numFuncs) {
     return EmbedderRuntimeRegistry.runtime().hostProviderCreate(interfaceName, numFuncs);
   }
+
+  public void attachMemory(HostProviderMemory mem) {
+    EmbedderRuntimeRegistry.runtime().hostProviderAttachMemory(this.handle, mem);
+  }
 }
