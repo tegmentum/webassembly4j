@@ -25,7 +25,7 @@
         <!-- Maven plugin versions -->
         <maven.version>3.9.16</maven.version>
         <maven-plugin-api.version>3.9.16</maven-plugin-api.version>
-        <maven-plugin-annotations.version>3.15.2</maven-plugin-annotations.version>
+        <maven-plugin-annotations.version>3.16.0</maven-plugin-annotations.version>
         <maven-project.version>2.2.1</maven-project.version>
 
         <!-- Picocli for CLI -->
@@ -93,7 +93,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-plugin-plugin</artifactId>
-                <version>3.15.2</version>
+                <version>3.16.0</version>
                 <configuration>
                     <goalPrefix>webassembly4j-component</goalPrefix>
                     <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
